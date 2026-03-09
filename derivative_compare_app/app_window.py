@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QListWidget, QListWidgetItem, QMainWindow, QMessageB
 from PyQt6.QtWidgets import QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QHeaderView
 
 from analysis_core import run_analysis
+from export_utils import export_table_csv, export_table_png
 from expression_utils import VARIABLES, parse_n_values
 from method_registry import MethodRegistry
 from plot_widget import PlotCanvas
@@ -21,8 +22,10 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Comparador de Derivadas e Convergência de Malha")
         self.resize(1500, 900)
+        self.base_dir = Path(base_dir)
         self.registry = MethodRegistry(base_dir)
         self.canvas = PlotCanvas()
+        self.last_results = None
         root = QWidget()
         self.setCentralWidget(root)
         outer = QVBoxLayout(root)
@@ -45,8 +48,8 @@ class MainWindow(QMainWindow):
     def _function_group(self):
         group = QGroupBox("Funções")
         layout = QVBoxLayout(group)
-        self.function_input = QLineEdit("sin(x) + y**2 + z*t")
-        self.reference_input = QLineEdit("cos(x)")
+        self.function_input = QLineEdit("cos(x)")
+        self.reference_input = QLineEdit("-sin(x)")
         help_box = QPlainTextEdit("Função base f(x,y,z,t) e gabarito da derivada.\nUse numpy: sin, cos, exp, pi, ...")
         help_box.setReadOnly(True)
         help_box.setMaximumHeight(90)
@@ -71,19 +74,21 @@ class MainWindow(QMainWindow):
         return group
 
     def _controls_group(self):
-        group = QGroupBox("Comparação e refinamento")
+        group = QGroupBox("Comparação, refinamento e exportação")
         layout = QGridLayout(group)
         self.diff_var = QComboBox(); self.diff_var.addItems(VARIABLES)
         self.plot_var = QComboBox(); self.plot_var.addItems(VARIABLES)
-        self.n_values = QLineEdit("21, 41, 81")
-        self.positions_input = QLineEdit("0, 0.5, 1.0")
+        self.n_values = QLineEdit("11, 21, 41, 81, 161")
+        self.positions_input = QLineEdit("0.0, 1.57")
         self.run_btn = QPushButton("Calcular")
+        self.export_btn = QPushButton("Exportar gráficos + tabela")
         layout.addWidget(QLabel("Derivar em relação a:"), 0, 0); layout.addWidget(self.diff_var, 0, 1)
         layout.addWidget(QLabel("Variável no gráfico:"), 0, 2); layout.addWidget(self.plot_var, 0, 3)
         layout.addWidget(QLabel("Refinamentos N:"), 1, 0); layout.addWidget(self.n_values, 1, 1, 1, 3)
         layout.addWidget(QLabel("Posições/instantes da tabela:"), 2, 0); layout.addWidget(self.positions_input, 2, 1, 1, 3)
-        layout.addWidget(self.run_btn, 3, 0, 1, 4)
+        layout.addWidget(self.run_btn, 3, 0, 1, 2); layout.addWidget(self.export_btn, 3, 2, 1, 2)
         self.run_btn.clicked.connect(self.compute)
+        self.export_btn.clicked.connect(self.export_outputs)
         return group
 
     def _table_group(self):
@@ -104,7 +109,8 @@ class MainWindow(QMainWindow):
             self.methods_list.addItem(item)
 
     def selected_methods(self):
-        return [self.registry.methods[self.methods_list.item(i).data(Qt.ItemDataRole.UserRole)] for i in range(self.methods_list.count()) if self.methods_list.item(i).checkState() == Qt.CheckState.Checked]
+        items = [self.methods_list.item(i) for i in range(self.methods_list.count())]
+        return [self.registry.methods[item.data(Qt.ItemDataRole.UserRole)] for item in items if item.checkState() == Qt.CheckState.Checked]
 
     def current_configs(self):
         data = {var: control.get_config() for var, control in self.var_controls.items()}
@@ -115,6 +121,7 @@ class MainWindow(QMainWindow):
         try:
             out = run_analysis(self.current_configs(), parse_n_values(self.n_values.text()), self.function_input.text(), self.reference_input.text(), self.diff_var.currentText(), self.plot_var.currentText(), self.selected_methods())
             results_by_n, line_data, conv_data, positions = out
+            self.last_results = out
             self.canvas.redraw(line_data, conv_data, self.diff_var.currentText(), self.plot_var.currentText())
             self.update_table(results_by_n, positions)
         except Exception as exc:
@@ -147,6 +154,20 @@ class MainWindow(QMainWindow):
                     err = "-" if name not in block["errors_lines"] else f"{block['errors_lines'][name][idx]:.8g}"
                     self.table.setItem(row, col, QTableWidgetItem(f"{val:.8g}")); self.table.setItem(row, col + 1, QTableWidgetItem(err)); col += 2
                 row += 1
+
+    def export_outputs(self):
+        if self.last_results is None or self.table.rowCount() == 0:
+            QMessageBox.information(self, "Nada para exportar", "Execute um cálculo antes de exportar.")
+            return
+        folder = QFileDialog.getExistingDirectory(self, "Escolha a pasta de exportação", str(self.base_dir))
+        if not folder:
+            return
+        out_dir = Path(folder)
+        self.canvas.export_line_plot(str(out_dir / "grafico_estimativas_1920x1080.png"))
+        self.canvas.export_convergence_plot(str(out_dir / "grafico_convergencia_1920x1080.png"))
+        export_table_png(self.table, out_dir / "tabela_1920x1080.png")
+        export_table_csv(self.table, out_dir / "tabela_dados.csv")
+        QMessageBox.information(self, "Exportação concluída", "Arquivos gerados: 2 gráficos PNG 1920x1080, tabela PNG 1920x1080 e tabela CSV.")
 
     def import_method(self):
         filepath, _ = QFileDialog.getOpenFileName(self, "Importar método", "", "Python (*.py)")
