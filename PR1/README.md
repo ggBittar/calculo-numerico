@@ -18,6 +18,8 @@ python -m venv .venv
 pip install -e .
 ```
 
+Isso tambem compila os kernels de Cython (`app/backend/pde_kernels.pyx`) usados no solver de EDP.
+
 ## Execucao
 
 Opcao 1:

@@ -1,5 +1,6 @@
 README.md
 pyproject.toml
+setup.py
 app/__init__.py
 app/__main__.py
 app/entry.py
@@ -8,6 +9,7 @@ app/backend/derivative_methods.py
 app/backend/derivative_service.py
 app/backend/expression_eval.py
 app/backend/functions.py
+app/backend/pde_kernels.c
 app/backend/pde_methods.py
 app/backend/pde_service.py
 app/backend/pdes.py

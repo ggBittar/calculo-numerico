@@ -8,6 +8,11 @@ from .expression_eval import evaluate_expression
 from .pde_methods import PDE_METHODS, PdeMethodSpec
 from .pdes import BoundaryCondition, PDES, PdeSpec
 
+try:
+    from . import pde_kernels as cython_kernels
+except Exception:
+    cython_kernels = None
+
 
 @dataclass(frozen=True)
 class PdeResult:
@@ -23,6 +28,13 @@ class PdeResult:
     metadata: dict[str, str]
 
 
+BOUNDARY_TYPE_CODES = {
+    "dirichlet": 0,
+    "neumann": 1,
+    "robin": 2,
+}
+
+
 def _build_axis_from_step(start: float, stop: float, step: float) -> np.ndarray:
     points = max(2, int(round((stop - start) / step)) + 1)
     return np.linspace(start, stop, points)
@@ -35,17 +47,21 @@ def _build_axis_from_count(start: float, stop: float, count: int) -> np.ndarray:
 
 def _build_axes(
     pde_spec: PdeSpec,
-    discretization_mode: str,
+    discretization_mode: str | None,
+    discretization_modes: dict[str, str] | None,
     steps: dict[str, float],
     counts: dict[str, int],
 ) -> dict[str, np.ndarray]:
     axes: dict[str, np.ndarray] = {}
     for variable in pde_spec.variables:
         lower, upper = pde_spec.domain[variable]
-        if discretization_mode == "step":
+        mode = (discretization_modes or {}).get(variable, discretization_mode or "step")
+        if mode == "step":
             axes[variable] = _build_axis_from_step(lower, upper, steps[variable])
-        else:
+        elif mode == "count":
             axes[variable] = _build_axis_from_count(lower, upper, counts[variable])
+        else:
+            raise ValueError(f"Modo de discretizacao invalido para {variable}: {mode}")
     return axes
 
 
@@ -141,6 +157,19 @@ def _evaluate_boundary(
     raise ValueError(f"Tipo de contorno nao suportado em {side}: {boundary.condition_type}")
 
 
+def _boundary_to_kernel_params(boundary: BoundaryCondition) -> tuple[int, float, float, float, float]:
+    condition_type = boundary.condition_type.lower()
+    if condition_type not in BOUNDARY_TYPE_CODES:
+        raise ValueError(f"Tipo de contorno nao suportado: {boundary.condition_type}")
+    return (
+        BOUNDARY_TYPE_CODES[condition_type],
+        float(boundary.value),
+        float(boundary.robin_alpha),
+        float(boundary.robin_beta),
+        float(boundary.robin_gamma),
+    )
+
+
 def _apply_boundaries_1d(field: np.ndarray, dx: float, boundaries: dict[str, BoundaryCondition]) -> None:
     field[0] = _evaluate_boundary("x_min", boundaries["x_min"], np.asarray(field[1]), dx)
     field[-1] = _evaluate_boundary("x_max", boundaries["x_max"], np.asarray(field[-2]), dx)
@@ -225,6 +254,35 @@ def _solve_explicit_euler(
     boundaries: dict[str, BoundaryCondition],
 ) -> np.ndarray:
     alpha = pde_spec.parameters["alpha"]
+    if cython_kernels is not None:
+        if pde_spec.pde_id == "heat_1d":
+            left = _boundary_to_kernel_params(boundaries["x_min"])
+            right = _boundary_to_kernel_params(boundaries["x_max"])
+            return cython_kernels.explicit_euler_heat_1d(
+                np.asarray(initial, dtype=np.float64),
+                np.asarray(axes["x"], dtype=np.float64),
+                np.asarray(axes["t"], dtype=np.float64),
+                float(alpha),
+                *left,
+                *right,
+            )
+        if pde_spec.pde_id == "heat_2d":
+            x_min = _boundary_to_kernel_params(boundaries["x_min"])
+            x_max = _boundary_to_kernel_params(boundaries["x_max"])
+            y_min = _boundary_to_kernel_params(boundaries["y_min"])
+            y_max = _boundary_to_kernel_params(boundaries["y_max"])
+            return cython_kernels.explicit_euler_heat_2d(
+                np.asarray(initial, dtype=np.float64),
+                np.asarray(axes["x"], dtype=np.float64),
+                np.asarray(axes["y"], dtype=np.float64),
+                np.asarray(axes["t"], dtype=np.float64),
+                float(alpha),
+                *x_min,
+                *x_max,
+                *y_min,
+                *y_max,
+            )
+
     if pde_spec.pde_id == "heat_1d":
         return _explicit_euler_heat_1d(initial, axes, alpha, boundaries)
     if pde_spec.pde_id == "heat_2d":
@@ -272,18 +330,19 @@ def _build_exact_solution(
 def solve_pde(
     pde_id: str,
     method_id: str,
-    discretization_mode: str,
+    discretization_mode: str | None,
     steps: dict[str, float],
     counts: dict[str, int],
     initial_mode: str,
     initial_value: float,
     initial_expression: str,
     boundaries: dict[str, BoundaryCondition],
+    discretization_modes: dict[str, str] | None = None,
 ) -> PdeResult:
     pde_spec = PDES[pde_id]
     method_spec = PDE_METHODS[method_id]
 
-    axes = _build_axes(pde_spec, discretization_mode, steps, counts)
+    axes = _build_axes(pde_spec, discretization_mode, discretization_modes, steps, counts)
     _validate_stability(pde_spec, axes)
     initial = _initial_condition_from_config(
         mode=initial_mode,

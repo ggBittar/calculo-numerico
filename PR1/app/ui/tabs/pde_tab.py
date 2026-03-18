@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -48,6 +49,8 @@ class PdeTab(QWidget):
 
         self._step_inputs: dict[str, QDoubleSpinBox] = {}
         self._count_inputs: dict[str, QSpinBox] = {}
+        self._discretization_mode_inputs: dict[str, QComboBox] = {}
+        self._variable_tabs: dict[str, QWidget] = {}
         self._boundary_controls: dict[str, BoundaryControls] = {}
         self._pde_ids = list(PDES.keys())
         self._current_result: PdeResult | None = None
@@ -84,11 +87,6 @@ class PdeTab(QWidget):
             self.method_combo.addItem(method.name, method_id)
         form_layout.addRow("Método numérico", self.method_combo)
 
-        self.discretization_combo = QComboBox()
-        self.discretization_combo.addItem("Definir por passo", "step")
-        self.discretization_combo.addItem("Definir por número de passos", "count")
-        form_layout.addRow("Discretização", self.discretization_combo)
-
         self.equation_label = QLabel()
         self.equation_label.setWordWrap(True)
         form_layout.addRow("Equação", self.equation_label)
@@ -102,8 +100,22 @@ class PdeTab(QWidget):
         form_layout.addRow("Solução analítica", self.exact_label)
 
         grid_group = QGroupBox("Malha por variável")
-        grid_layout = QFormLayout(grid_group)
+        grid_layout = QVBoxLayout(grid_group)
+        self.grid_tabs = QTabWidget()
+        self.grid_tabs.setTabPosition(QTabWidget.TabPosition.North)
+        grid_layout.addWidget(self.grid_tabs)
         for variable in ("x", "y", "z", "t"):
+            variable_tab = QWidget()
+            variable_layout = QFormLayout(variable_tab)
+            self._variable_tabs[variable] = variable_tab
+
+            mode_combo = QComboBox()
+            mode_combo.addItem("Por passo", "step")
+            mode_combo.addItem("Por número de passos", "count")
+            mode_combo.setEnabled(False)
+            self._discretization_mode_inputs[variable] = mode_combo
+            variable_layout.addRow("modo", mode_combo)
+
             step_spin = QDoubleSpinBox()
             step_spin.setRange(0.0001, 10.0)
             step_spin.setDecimals(5)
@@ -111,14 +123,15 @@ class PdeTab(QWidget):
             step_spin.setValue(0.01)
             step_spin.setEnabled(False)
             self._step_inputs[variable] = step_spin
-            grid_layout.addRow(f"d{variable}", step_spin)
+            variable_layout.addRow(f"d{variable}", step_spin)
 
             count_spin = QSpinBox()
             count_spin.setRange(1, 10000)
             count_spin.setValue(10)
             count_spin.setEnabled(False)
             self._count_inputs[variable] = count_spin
-            grid_layout.addRow(f"passos {variable}", count_spin)
+            variable_layout.addRow("passos", count_spin)
+            self.grid_tabs.addTab(variable_tab, variable)
 
         initial_group = QGroupBox("Condição inicial")
         initial_layout = QVBoxLayout(initial_group)
@@ -130,7 +143,7 @@ class PdeTab(QWidget):
         self.initial_value_input = QDoubleSpinBox()
         self.initial_value_input.setRange(-1_000_000.0, 1_000_000.0)
         self.initial_value_input.setDecimals(6)
-        self.initial_value_input.setValue(0.0)
+        self.initial_value_input.setValue(293.0)
 
         self.initial_expression_input = QLineEdit("sin(pi*x)")
         self.initial_expression_input.setEnabled(False)
@@ -161,12 +174,13 @@ class PdeTab(QWidget):
 
         self.pde_combo.currentIndexChanged.connect(self._refresh_pde_details)
         self.method_combo.currentIndexChanged.connect(self._run_solver)
-        self.discretization_combo.currentIndexChanged.connect(self._refresh_discretization_mode)
         self.initial_value_radio.toggled.connect(self._refresh_initial_mode)
         self.initial_function_radio.toggled.connect(self._refresh_initial_mode)
         self.initial_value_input.valueChanged.connect(self._run_solver)
         self.initial_expression_input.textChanged.connect(self._run_solver)
         self.run_button.clicked.connect(self._run_solver)
+        for combo in self._discretization_mode_inputs.values():
+            combo.currentIndexChanged.connect(self._refresh_discretization_mode)
         for spin in self._step_inputs.values():
             spin.valueChanged.connect(self._run_solver)
         for spin in self._count_inputs.values():
@@ -280,6 +294,19 @@ class PdeTab(QWidget):
             if enabled:
                 spin.setValue(spec.default_counts[variable])
 
+        for variable, combo in self._discretization_mode_inputs.items():
+            enabled = variable in spec.variables
+            combo.setEnabled(enabled)
+            if enabled:
+                combo.setCurrentIndex(combo.findData("step"))
+            tab_index = self.grid_tabs.indexOf(self._variable_tabs[variable])
+            self.grid_tabs.setTabVisible(tab_index, enabled)
+
+        if spec.variables:
+            first_variable = spec.variables[0]
+            first_index = self.grid_tabs.indexOf(self._variable_tabs[first_variable])
+            self.grid_tabs.setCurrentIndex(first_index)
+
         for side, controls in self._boundary_controls.items():
             visible = side in spec.boundary_sides
             controls.group.setVisible(visible)
@@ -300,6 +327,7 @@ class PdeTab(QWidget):
             else "Sem variáveis espaciais configuradas."
         )
         self.initial_expression_input.setText(example_expression)
+        self.initial_value_input.setValue(293.0)
         self._refresh_boundary_inputs()
         self._refresh_discretization_mode()
         self._refresh_initial_mode()
@@ -319,8 +347,8 @@ class PdeTab(QWidget):
         self._run_solver()
 
     def _refresh_discretization_mode(self) -> None:
-        mode = cast(str, self.discretization_combo.currentData())
         for variable in ("x", "y", "z", "t"):
+            mode = cast(str, self._discretization_mode_inputs[variable].currentData())
             step_spin = self._step_inputs[variable]
             count_spin = self._count_inputs[variable]
             step_spin.setVisible(step_spin.isEnabled() and mode == "step")
@@ -344,6 +372,13 @@ class PdeTab(QWidget):
     def _collect_counts(self) -> dict[str, int]:
         return {variable: spin.value() for variable, spin in self._count_inputs.items() if spin.isEnabled()}
 
+    def _collect_discretization_modes(self) -> dict[str, str]:
+        return {
+            variable: cast(str, combo.currentData())
+            for variable, combo in self._discretization_mode_inputs.items()
+            if combo.isEnabled()
+        }
+
     def _collect_boundaries(self) -> dict[str, BoundaryCondition]:
         spec = self._current_pde()
         boundaries: dict[str, BoundaryCondition] = {}
@@ -363,13 +398,14 @@ class PdeTab(QWidget):
             result = solve_pde(
                 pde_id=cast(str, self.pde_combo.currentData()),
                 method_id=cast(str, self.method_combo.currentData()),
-                discretization_mode=cast(str, self.discretization_combo.currentData()),
+                discretization_mode=None,
                 steps=self._collect_steps(),
                 counts=self._collect_counts(),
                 initial_mode="value" if self.initial_value_radio.isChecked() else "function",
                 initial_value=self.initial_value_input.value(),
                 initial_expression=self.initial_expression_input.text(),
                 boundaries=self._collect_boundaries(),
+                discretization_modes=self._collect_discretization_modes(),
             )
         except Exception as exc:
             self._current_result = None
@@ -430,6 +466,7 @@ class PdeTab(QWidget):
 
     def _render_plot(self, result: PdeResult, time_index: int) -> None:
         self.figure.clear()
+        self.figure.patch.set_facecolor("#121417")
         selected_time = result.axes["t"][time_index]
         selected_slice = result.solution[time_index]
         selected_exact_slice = result.exact_solution[time_index] if result.exact_solution is not None else None
@@ -437,18 +474,32 @@ class PdeTab(QWidget):
         if len(result.spatial_axes) == 1:
             axis_name = result.spatial_axes[0]
             ax = self.figure.add_subplot(111)
+            ax.set_facecolor("#1b1f24")
             axis_values = result.axes[axis_name]
-            ax.plot(axis_values, selected_slice, label="Aproximação", color="#bf616a", linewidth=2.0)
+            ax.plot(axis_values, selected_slice, label="Aproximação", color="#88c0d0", linewidth=2.0)
             if selected_exact_slice is not None:
-                ax.plot(axis_values, selected_exact_slice, label="Exata", color="#5e81ac", linestyle="--")
+                ax.plot(axis_values, selected_exact_slice, label="Exata", color="#a3be8c", linestyle="--")
             ax.set_title(f"Perfil em t={selected_time:.4f}")
             ax.set_xlabel(axis_name)
             ax.set_ylabel("u")
-            ax.grid(True, alpha=0.25)
+            ax.tick_params(colors="#e5e9f0")
+            ax.xaxis.label.set_color("#e5e9f0")
+            ax.yaxis.label.set_color("#e5e9f0")
+            ax.title.set_color("#eceff4")
+            for spine in ax.spines.values():
+                spine.set_color("#4c566a")
+            ax.grid(True, alpha=0.25, color="#4c566a")
             ax.legend()
+            legend = ax.get_legend()
+            if legend is not None:
+                legend.get_frame().set_facecolor("#2e3440")
+                legend.get_frame().set_edgecolor("#4c566a")
+                for text in legend.get_texts():
+                    text.set_color("#eceff4")
         elif len(result.spatial_axes) == 2:
             axis_x, axis_y = result.spatial_axes
             ax = self.figure.add_subplot(111)
+            ax.set_facecolor("#1b1f24")
             image = ax.imshow(
                 selected_slice.T,
                 origin="lower",
@@ -464,9 +515,20 @@ class PdeTab(QWidget):
             ax.set_title(f"Campo em t={selected_time:.4f}")
             ax.set_xlabel(axis_x)
             ax.set_ylabel(axis_y)
-            self.figure.colorbar(image, ax=ax, label="u")
+            ax.tick_params(colors="#e5e9f0")
+            ax.xaxis.label.set_color("#e5e9f0")
+            ax.yaxis.label.set_color("#e5e9f0")
+            ax.title.set_color("#eceff4")
+            for spine in ax.spines.values():
+                spine.set_color("#4c566a")
+            colorbar = self.figure.colorbar(image, ax=ax, label="u")
+            colorbar.ax.yaxis.label.set_color("#e5e9f0")
+            colorbar.ax.tick_params(colors="#e5e9f0")
+            colorbar.outline.set_edgecolor("#4c566a")
         else:
             ax = self.figure.add_subplot(111)
+            ax.set_facecolor("#1b1f24")
+            ax.tick_params(colors="#e5e9f0")
             ax.text(0.5, 0.5, "Visualização não implementada para esta dimensão.", ha="center", va="center")
             ax.set_axis_off()
 
