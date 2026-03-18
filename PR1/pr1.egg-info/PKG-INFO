@@ -1,0 +1,51 @@
+Metadata-Version: 2.4
+Name: pr1
+Version: 0.1.0
+Summary: Aplicacao PyQt6 para estimativas numericas de derivadas e EDPs.
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: matplotlib>=3.8
+Requires-Dist: numpy>=1.26
+Requires-Dist: PyQt6>=6.7
+
+# PR1
+
+Aplicacao desktop em Python para experimentos de calculo numerico com:
+
+- estimativa de derivadas por diferencas finitas;
+- estimativa de funcao com base em EDPs usando Euler explicito.
+
+## Requisitos
+
+- Python 3.11+
+
+## Preparacao do ambiente
+
+```powershell
+cd PR1
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e .
+```
+
+## Execucao
+
+Opcao 1:
+
+```powershell
+cd PR1
+python main.py
+```
+
+Opcao 2:
+
+```powershell
+cd PR1
+pr1
+```
+
+## Estrutura
+
+- `app/backend`: cadastros de funcoes, metodos e problemas de EDP.
+- `app/ui`: interface grafica.
+- `main.py`: inicializacao simples para execucao local.
