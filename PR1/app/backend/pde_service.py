@@ -187,6 +187,20 @@ def _apply_boundaries_2d(
     field[:, -1] = _evaluate_boundary("y_max", boundaries["y_max"], field[:, -2], dy)
 
 
+def _build_save_indices(t_axis: np.ndarray, save_dt: float | None) -> np.ndarray:
+    if save_dt is None:
+        return np.arange(len(t_axis), dtype=int)
+    if save_dt <= 0.0:
+        raise ValueError("dt de salvamento deve ser maior que zero.")
+
+    dt = float(t_axis[1] - t_axis[0])
+    stride = max(1, int(round(save_dt / dt)))
+    indices = np.arange(0, len(t_axis), stride, dtype=int)
+    if indices[-1] != len(t_axis) - 1:
+        indices = np.append(indices, len(t_axis) - 1)
+    return indices
+
+
 def _explicit_euler_heat_1d(
     initial: np.ndarray,
     axes: dict[str, np.ndarray],
@@ -210,6 +224,39 @@ def _explicit_euler_heat_1d(
         )
         _apply_boundaries_1d(next_state, dx, boundaries)
         solution[n + 1] = next_state
+
+    return solution
+
+
+def _explicit_euler_heat_1d_sparse(
+    initial: np.ndarray,
+    axes: dict[str, np.ndarray],
+    alpha: float,
+    boundaries: dict[str, BoundaryCondition],
+    save_indices: np.ndarray,
+) -> np.ndarray:
+    x = axes["x"]
+    t = axes["t"]
+    dx = x[1] - x[0]
+    dt = t[1] - t[0]
+
+    solution = np.zeros((len(save_indices), len(x)), dtype=float)
+    state = np.asarray(initial, dtype=float).copy()
+    _apply_boundaries_1d(state, dx, boundaries)
+    save_ptr = 0
+    if save_indices[0] == 0:
+        solution[0] = state
+        save_ptr = 1
+
+    factor = alpha * dt / (dx**2)
+    for n in range(len(t) - 1):
+        next_state = state.copy()
+        next_state[1:-1] = state[1:-1] + factor * (state[2:] - 2.0 * state[1:-1] + state[:-2])
+        _apply_boundaries_1d(next_state, dx, boundaries)
+        state = next_state
+        if save_ptr < len(save_indices) and (n + 1) == int(save_indices[save_ptr]):
+            solution[save_ptr] = state
+            save_ptr += 1
 
     return solution
 
@@ -247,14 +294,55 @@ def _explicit_euler_heat_2d(
     return solution
 
 
+def _explicit_euler_heat_2d_sparse(
+    initial: np.ndarray,
+    axes: dict[str, np.ndarray],
+    alpha: float,
+    boundaries: dict[str, BoundaryCondition],
+    save_indices: np.ndarray,
+) -> np.ndarray:
+    x = axes["x"]
+    y = axes["y"]
+    t = axes["t"]
+    dx = x[1] - x[0]
+    dy = y[1] - y[0]
+    dt = t[1] - t[0]
+
+    solution = np.zeros((len(save_indices), len(x), len(y)), dtype=float)
+    state = np.asarray(initial, dtype=float).copy()
+    _apply_boundaries_2d(state, dx, dy, boundaries)
+    save_ptr = 0
+    if save_indices[0] == 0:
+        solution[0] = state
+        save_ptr = 1
+
+    fx = alpha * dt / (dx**2)
+    fy = alpha * dt / (dy**2)
+
+    for n in range(len(t) - 1):
+        next_state = state.copy()
+        next_state[1:-1, 1:-1] = state[1:-1, 1:-1] + fx * (
+            state[2:, 1:-1] - 2.0 * state[1:-1, 1:-1] + state[:-2, 1:-1]
+        ) + fy * (state[1:-1, 2:] - 2.0 * state[1:-1, 1:-1] + state[1:-1, :-2])
+        _apply_boundaries_2d(next_state, dx, dy, boundaries)
+        state = next_state
+        if save_ptr < len(save_indices) and (n + 1) == int(save_indices[save_ptr]):
+            solution[save_ptr] = state
+            save_ptr += 1
+
+    return solution
+
+
 def _solve_explicit_euler(
     pde_spec: PdeSpec,
     axes: dict[str, np.ndarray],
     initial: np.ndarray,
     boundaries: dict[str, BoundaryCondition],
+    save_indices: np.ndarray,
 ) -> np.ndarray:
     alpha = pde_spec.parameters["alpha"]
-    if cython_kernels is not None:
+    can_use_dense = len(save_indices) == len(axes["t"])
+    if cython_kernels is not None and can_use_dense:
         if pde_spec.pde_id == "heat_1d":
             left = _boundary_to_kernel_params(boundaries["x_min"])
             right = _boundary_to_kernel_params(boundaries["x_max"])
@@ -284,9 +372,13 @@ def _solve_explicit_euler(
             )
 
     if pde_spec.pde_id == "heat_1d":
-        return _explicit_euler_heat_1d(initial, axes, alpha, boundaries)
+        if can_use_dense:
+            return _explicit_euler_heat_1d(initial, axes, alpha, boundaries)
+        return _explicit_euler_heat_1d_sparse(initial, axes, alpha, boundaries, save_indices)
     if pde_spec.pde_id == "heat_2d":
-        return _explicit_euler_heat_2d(initial, axes, alpha, boundaries)
+        if can_use_dense:
+            return _explicit_euler_heat_2d(initial, axes, alpha, boundaries)
+        return _explicit_euler_heat_2d_sparse(initial, axes, alpha, boundaries, save_indices)
     raise ValueError(f"Solver Euler ainda nao implementado para {pde_spec.pde_id}.")
 
 
@@ -338,6 +430,7 @@ def solve_pde(
     initial_expression: str,
     boundaries: dict[str, BoundaryCondition],
     discretization_modes: dict[str, str] | None = None,
+    save_dt: float | None = None,
 ) -> PdeResult:
     pde_spec = PDES[pde_id]
     method_spec = PDE_METHODS[method_id]
@@ -351,9 +444,12 @@ def solve_pde(
         axes=axes,
         variables=pde_spec.variables,
     )
+    save_indices = _build_save_indices(axes["t"], save_dt)
+    saved_axes = dict(axes)
+    saved_axes["t"] = axes["t"][save_indices]
 
-    solution = _solve_explicit_euler(pde_spec, axes, initial, boundaries)
-    exact_solution = _build_exact_solution(pde_spec, axes, boundaries)
+    solution = _solve_explicit_euler(pde_spec, axes, initial, boundaries, save_indices)
+    exact_solution = _build_exact_solution(pde_spec, saved_axes, boundaries)
     exact_status = "disponivel"
     if pde_spec.exact_solution is None:
         exact_status = "nao cadastrada"
@@ -367,18 +463,23 @@ def solve_pde(
     if final_exact_slice is not None:
         error_max = float(np.max(np.abs(final_slice - final_exact_slice)))
 
+    effective_save_dt = "N/D"
+    if len(saved_axes["t"]) > 1:
+        effective_save_dt = f"{float(saved_axes['t'][1] - saved_axes['t'][0]):.5f}"
+
     metadata = {
         "equation": pde_spec.equation,
         "boundary": _boundaries_summary(boundaries),
         "exact": pde_spec.exact_expression or "Nao informada",
         "exact_status": exact_status,
         "initial_mode": "valor constante" if initial_mode == "value" else "funcao das variaveis espaciais",
+        "save_dt": effective_save_dt,
     }
 
     return PdeResult(
         pde_spec=pde_spec,
         method_spec=method_spec,
-        axes=axes,
+        axes=saved_axes,
         solution=solution,
         exact_solution=exact_solution,
         final_slice=final_slice,

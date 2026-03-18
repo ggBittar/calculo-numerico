@@ -99,6 +99,13 @@ class PdeTab(QWidget):
         self.exact_label.setWordWrap(True)
         form_layout.addRow("Solução analítica", self.exact_label)
 
+        self.save_dt_input = QDoubleSpinBox()
+        self.save_dt_input.setRange(0.0001, 10_000.0)
+        self.save_dt_input.setDecimals(5)
+        self.save_dt_input.setSingleStep(0.001)
+        self.save_dt_input.setValue(0.1)
+        form_layout.addRow("dt salvamento", self.save_dt_input)
+
         grid_group = QGroupBox("Malha por variável")
         grid_layout = QVBoxLayout(grid_group)
         self.grid_tabs = QTabWidget()
@@ -178,6 +185,7 @@ class PdeTab(QWidget):
         self.initial_function_radio.toggled.connect(self._refresh_initial_mode)
         self.initial_value_input.valueChanged.connect(self._run_solver)
         self.initial_expression_input.textChanged.connect(self._run_solver)
+        self.save_dt_input.valueChanged.connect(self._run_solver)
         self.run_button.clicked.connect(self._run_solver)
         for combo in self._discretization_mode_inputs.values():
             combo.currentIndexChanged.connect(self._refresh_discretization_mode)
@@ -281,6 +289,7 @@ class PdeTab(QWidget):
         self.equation_label.setText(spec.equation)
         self.boundary_label.setText(self._format_boundary_defaults(spec.default_boundary_conditions))
         self.exact_label.setText(spec.exact_expression or "Opcional / não cadastrada")
+        self.save_dt_input.setValue(spec.default_steps["t"])
 
         for variable, spin in self._step_inputs.items():
             enabled = variable in spec.variables
@@ -406,6 +415,7 @@ class PdeTab(QWidget):
                 initial_expression=self.initial_expression_input.text(),
                 boundaries=self._collect_boundaries(),
                 discretization_modes=self._collect_discretization_modes(),
+                save_dt=self.save_dt_input.value(),
             )
         except Exception as exc:
             self._current_result = None
@@ -457,6 +467,7 @@ class PdeTab(QWidget):
             f"Metodo: {result.method_spec.name}\n"
             f"Passos: {steps_text}\n"
             f"Número de passos: {counts_text}\n"
+            f"dt salvamento: {result.metadata['save_dt']}\n"
             f"Condicao inicial: {result.metadata['initial_mode']}\n"
             f"Contornos: {result.metadata['boundary']}\n"
             f"Solução analítica: {result.metadata['exact_status']}\n"

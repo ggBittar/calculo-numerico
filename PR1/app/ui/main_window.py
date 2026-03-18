@@ -14,7 +14,7 @@ class MainWindow(QMainWindow):
         self.resize(1280, 860)
 
         tabs = QTabWidget()
-        tabs.addTab(DerivativeTab(), "Estimativa de Derivadas")
+        # tabs.addTab(DerivativeTab(), "Estimativa de Derivadas")
         tabs.addTab(PdeTab(), "Estimativa via EDP")
 
         self.setCentralWidget(tabs)
