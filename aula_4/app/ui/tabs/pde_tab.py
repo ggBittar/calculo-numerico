@@ -8,6 +8,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -52,8 +53,10 @@ class PdeTab(QWidget):
         self._discretization_mode_inputs: dict[str, QComboBox] = {}
         self._variable_tabs: dict[str, QWidget] = {}
         self._boundary_controls: dict[str, BoundaryControls] = {}
+        self._comparison_checkboxes: dict[str, QCheckBox] = {}
         self._pde_ids = list(PDES.keys())
         self._current_result: PdeResult | None = None
+        self._comparison_results: dict[str, PdeResult] = {}
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -85,7 +88,7 @@ class PdeTab(QWidget):
         self.method_combo = QComboBox()
         for method_id, method in PDE_METHODS.items():
             self.method_combo.addItem(method.name, method_id)
-        form_layout.addRow("Método numérico", self.method_combo)
+        form_layout.addRow("Malha principal", self.method_combo)
 
         self.equation_label = QLabel()
         self.equation_label.setWordWrap(True)
@@ -166,6 +169,16 @@ class PdeTab(QWidget):
         self.boundaries_layout = QGridLayout(self.boundaries_group)
         self._create_boundary_controls()
 
+        comparison_group = QGroupBox("Comparação entre malhas")
+        comparison_layout = QVBoxLayout(comparison_group)
+        comparison_layout.addWidget(QLabel("Selecione quais malhas devem ser comparadas em cada tempo salvo."))
+        for method_id, method in PDE_METHODS.items():
+            checkbox = QCheckBox(method.name)
+            checkbox.setChecked(True)
+            checkbox.toggled.connect(self._run_solver)
+            self._comparison_checkboxes[method_id] = checkbox
+            comparison_layout.addWidget(checkbox)
+
         self.hint_label = QLabel()
         self.hint_label.setWordWrap(True)
 
@@ -175,6 +188,7 @@ class PdeTab(QWidget):
         layout.addWidget(grid_group)
         layout.addWidget(initial_group)
         layout.addWidget(self.boundaries_group)
+        layout.addWidget(comparison_group)
         layout.addWidget(self.hint_label)
         layout.addWidget(self.run_button)
         layout.addStretch(1)
@@ -402,23 +416,40 @@ class PdeTab(QWidget):
             )
         return boundaries
 
+    def _collect_comparison_method_ids(self) -> list[str]:
+        return [method_id for method_id, checkbox in self._comparison_checkboxes.items() if checkbox.isChecked()]
+
     def _run_solver(self) -> None:
         try:
+            solve_kwargs = {
+                "pde_id": cast(str, self.pde_combo.currentData()),
+                "discretization_mode": None,
+                "steps": self._collect_steps(),
+                "counts": self._collect_counts(),
+                "initial_mode": "value" if self.initial_value_radio.isChecked() else "function",
+                "initial_value": self.initial_value_input.value(),
+                "initial_expression": self.initial_expression_input.text(),
+                "boundaries": self._collect_boundaries(),
+                "discretization_modes": self._collect_discretization_modes(),
+                "save_dt": self.save_dt_input.value(),
+            }
+            current_method_id = cast(str, self.method_combo.currentData())
             result = solve_pde(
-                pde_id=cast(str, self.pde_combo.currentData()),
-                method_id=cast(str, self.method_combo.currentData()),
-                discretization_mode=None,
-                steps=self._collect_steps(),
-                counts=self._collect_counts(),
-                initial_mode="value" if self.initial_value_radio.isChecked() else "function",
-                initial_value=self.initial_value_input.value(),
-                initial_expression=self.initial_expression_input.text(),
-                boundaries=self._collect_boundaries(),
-                discretization_modes=self._collect_discretization_modes(),
-                save_dt=self.save_dt_input.value(),
+                method_id=current_method_id,
+                **solve_kwargs,
             )
+            comparison_results: dict[str, PdeResult] = {}
+            for method_id in self._collect_comparison_method_ids():
+                if method_id == current_method_id:
+                    comparison_results[method_id] = result
+                    continue
+                comparison_results[method_id] = solve_pde(
+                    method_id=method_id,
+                    **solve_kwargs,
+                )
         except Exception as exc:
             self._current_result = None
+            self._comparison_results = {}
             self.summary_box.setPlainText(f"Erro na configuração da EDP:\n{exc}")
             self.figure.clear()
             self.canvas.draw_idle()
@@ -428,6 +459,7 @@ class PdeTab(QWidget):
             return
 
         self._current_result = result
+        self._comparison_results = comparison_results
         self._configure_time_slider()
         self._render_current_time_view()
 
@@ -456,7 +488,10 @@ class PdeTab(QWidget):
         steps_text = ", ".join(
             f"d{axis}={result.axes[axis][1] - result.axes[axis][0]:.5f}" for axis in result.pde_spec.variables
         )
-        counts_text = ", ".join(f"{axis}:{len(result.axes[axis]) - 1}" for axis in result.pde_spec.variables)
+        counts_parts = []
+        for axis in result.pde_spec.variables:
+            counts_parts.append(f"{axis}:{len(result.axes[axis]) - 1}")
+        counts_text = ", ".join(counts_parts)
         error_text = f"{result.error_max:.3e}" if result.error_max is not None else "Nao disponivel"
         selected_time = result.axes["t"][time_index]
         self.time_label.setText(
@@ -464,7 +499,7 @@ class PdeTab(QWidget):
         )
         summary = (
             f"EDP: {result.metadata['equation']}\n"
-            f"Metodo: {result.method_spec.name}\n"
+            f"Malha principal: {result.method_spec.name}\n"
             f"Passos: {steps_text}\n"
             f"Número de passos: {counts_text}\n"
             f"dt salvamento: {result.metadata['save_dt']}\n"
@@ -473,6 +508,17 @@ class PdeTab(QWidget):
             f"Solução analítica: {result.metadata['exact_status']}\n"
             f"Erro maximo final: {error_text}"
         )
+        if self._comparison_results:
+            comparison_lines = []
+            for method_id, comparison_result in self._comparison_results.items():
+                selected_exact_slice = (
+                    comparison_result.exact_solution[time_index] if comparison_result.exact_solution is not None else None
+                )
+                selected_error = "Nao disponivel"
+                if selected_exact_slice is not None:
+                    selected_error = f"{float(np.max(np.abs(comparison_result.solution[time_index] - selected_exact_slice))):.3e}"
+                comparison_lines.append(f"{PDE_METHODS[method_id].name}: erro em t={selected_time:.5f} = {selected_error}")
+            summary = f"{summary}\nComparacao no tempo selecionado: " + " | ".join(comparison_lines)
         self.summary_box.setPlainText(summary)
 
     def _render_plot(self, result: PdeResult, time_index: int) -> None:
@@ -481,16 +527,38 @@ class PdeTab(QWidget):
         selected_time = result.axes["t"][time_index]
         selected_slice = result.solution[time_index]
         selected_exact_slice = result.exact_solution[time_index] if result.exact_solution is not None else None
+        comparison_results = self._comparison_results
 
         if len(result.spatial_axes) == 1:
             axis_name = result.spatial_axes[0]
             ax = self.figure.add_subplot(111)
             ax.set_facecolor("#1b1f24")
-            axis_values = result.axes[axis_name]
-            ax.plot(axis_values, selected_slice, label="Aproximação", color="#88c0d0", linewidth=2.0)
-            if selected_exact_slice is not None:
-                ax.plot(axis_values, selected_exact_slice, label="Exata", color="#a3be8c", linestyle="--")
-            ax.set_title(f"Perfil em t={selected_time:.4f}")
+            if comparison_results:
+                colors = ["#88c0d0", "#d08770", "#b48ead", "#ebcb8b"]
+                for index, comparison_result in enumerate(comparison_results.values()):
+                    axis_values = comparison_result.axes[axis_name]
+                    ax.plot(
+                        axis_values,
+                        comparison_result.solution[time_index],
+                        label=comparison_result.method_spec.name,
+                        color=colors[index % len(colors)],
+                        linewidth=2.0,
+                    )
+                if selected_exact_slice is not None:
+                    ax.plot(
+                        result.axes[axis_name],
+                        selected_exact_slice,
+                        label="Exata",
+                        color="#a3be8c",
+                        linestyle="--",
+                    )
+                ax.set_title(f"Comparacao das malhas em t={selected_time:.4f}")
+            else:
+                axis_values = result.axes[axis_name]
+                ax.plot(axis_values, selected_slice, label="Aproximação", color="#88c0d0", linewidth=2.0)
+                if selected_exact_slice is not None:
+                    ax.plot(axis_values, selected_exact_slice, label="Exata", color="#a3be8c", linestyle="--")
+                ax.set_title(f"Perfil em t={selected_time:.4f}")
             ax.set_xlabel(axis_name)
             ax.set_ylabel("u")
             ax.tick_params(colors="#e5e9f0")
@@ -509,33 +577,41 @@ class PdeTab(QWidget):
                     text.set_color("#eceff4")
         elif len(result.spatial_axes) == 2:
             axis_x, axis_y = result.spatial_axes
-            ax = self.figure.add_subplot(111)
-            ax.set_facecolor("#1b1f24")
-            image = ax.imshow(
-                selected_slice.T,
-                origin="lower",
-                aspect="auto",
-                extent=[
-                    result.axes[axis_x][0],
-                    result.axes[axis_x][-1],
-                    result.axes[axis_y][0],
-                    result.axes[axis_y][-1],
-                ],
-                cmap="viridis",
-            )
-            ax.set_title(f"Campo em t={selected_time:.4f}")
-            ax.set_xlabel(axis_x)
-            ax.set_ylabel(axis_y)
-            ax.tick_params(colors="#e5e9f0")
-            ax.xaxis.label.set_color("#e5e9f0")
-            ax.yaxis.label.set_color("#e5e9f0")
-            ax.title.set_color("#eceff4")
-            for spine in ax.spines.values():
-                spine.set_color("#4c566a")
-            colorbar = self.figure.colorbar(image, ax=ax, label="u")
-            colorbar.ax.yaxis.label.set_color("#e5e9f0")
-            colorbar.ax.tick_params(colors="#e5e9f0")
-            colorbar.outline.set_edgecolor("#4c566a")
+            if comparison_results:
+                comparison_items = list(comparison_results.values())
+                exact_available = any(item.exact_solution is not None for item in comparison_items)
+                subplot_count = len(comparison_items) + (1 if exact_available else 0)
+                for subplot_index, comparison_result in enumerate(comparison_items, start=1):
+                    ax = self.figure.add_subplot(1, subplot_count, subplot_index)
+                    self._render_heatmap(
+                        ax=ax,
+                        result=comparison_result,
+                        field=comparison_result.solution[time_index],
+                        title=f"{comparison_result.method_spec.name} | t={selected_time:.4f}",
+                        axis_x=axis_x,
+                        axis_y=axis_y,
+                    )
+                if exact_available:
+                    exact_result = next(item for item in comparison_items if item.exact_solution is not None)
+                    ax = self.figure.add_subplot(1, subplot_count, subplot_count)
+                    self._render_heatmap(
+                        ax=ax,
+                        result=exact_result,
+                        field=cast(np.ndarray, exact_result.exact_solution)[time_index],
+                        title=f"Solucao exata | t={selected_time:.4f}",
+                        axis_x=axis_x,
+                        axis_y=axis_y,
+                    )
+            else:
+                ax = self.figure.add_subplot(111)
+                self._render_heatmap(
+                    ax=ax,
+                    result=result,
+                    field=selected_slice,
+                    title=f"Campo em t={selected_time:.4f}",
+                    axis_x=axis_x,
+                    axis_y=axis_y,
+                )
         else:
             ax = self.figure.add_subplot(111)
             ax.set_facecolor("#1b1f24")
@@ -545,6 +621,48 @@ class PdeTab(QWidget):
 
         self.figure.tight_layout()
         self.canvas.draw_idle()
+
+    def _axis_extent(self, result: PdeResult, axis_name: str) -> tuple[float, float]:
+        axis_values = result.axes[axis_name]
+        return float(axis_values[0]), float(axis_values[-1])
+
+    def _render_heatmap(
+        self,
+        ax,
+        result: PdeResult,
+        field: np.ndarray,
+        title: str,
+        axis_x: str,
+        axis_y: str,
+    ) -> None:
+        ax.set_facecolor("#1b1f24")
+        x_min, x_max = self._axis_extent(result, axis_x)
+        y_min, y_max = self._axis_extent(result, axis_y)
+        image = ax.imshow(
+            field.T,
+            origin="lower",
+            aspect="auto",
+            extent=[
+                x_min,
+                x_max,
+                y_min,
+                y_max,
+            ],
+            cmap="viridis",
+        )
+        ax.set_title(title)
+        ax.set_xlabel(axis_x)
+        ax.set_ylabel(axis_y)
+        ax.tick_params(colors="#e5e9f0")
+        ax.xaxis.label.set_color("#e5e9f0")
+        ax.yaxis.label.set_color("#e5e9f0")
+        ax.title.set_color("#eceff4")
+        for spine in ax.spines.values():
+            spine.set_color("#4c566a")
+        colorbar = self.figure.colorbar(image, ax=ax, label="u")
+        colorbar.ax.yaxis.label.set_color("#e5e9f0")
+        colorbar.ax.tick_params(colors="#e5e9f0")
+        colorbar.outline.set_edgecolor("#4c566a")
 
     def _render_table(self, result: PdeResult, time_index: int) -> None:
         selected_slice = result.solution[time_index]
