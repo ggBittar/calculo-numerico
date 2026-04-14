@@ -46,7 +46,7 @@ TEMPO_FINAL = 4.0 * 3600.0  # 4 h [s]
 TEMPOS_CAMPOS = [0.0, 1800.0, 3600.0, 7200.0, 10800.0, 14400.0]
 MALHAS = [10, 20, 40, 80]
 
-PASTA_FIG = "/mnt/data/figuras_avaliacao"
+PASTA_FIG = "./figuras_avaliacao"
 os.makedirs(PASTA_FIG, exist_ok=True)
 
 
