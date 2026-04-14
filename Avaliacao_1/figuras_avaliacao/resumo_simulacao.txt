@@ -1,0 +1,27 @@
+Malha N=10x10
+  backend = cpu-serial
+  dt = 26.470588235294 s
+  nsteps = 544
+  T_centro_final = 377.668519 K
+  T_quarto_final = 388.519663 K
+
+Malha N=20x20
+  backend = cpu-serial
+  dt = 6.000000000000 s
+  nsteps = 2400
+  T_centro_final = 373.192647 K
+  T_quarto_final = 386.617287 K
+
+Malha N=40x40
+  backend = cpu-serial
+  dt = 1.427438540841 s
+  nsteps = 10088
+  T_centro_final = 373.933045 K
+  T_quarto_final = 386.928004 K
+
+Malha N=80x80
+  backend = cpu-serial
+  dt = 0.347893312717 s
+  nsteps = 41392
+  T_centro_final = 374.985013 K
+  T_quarto_final = 387.077743 K
