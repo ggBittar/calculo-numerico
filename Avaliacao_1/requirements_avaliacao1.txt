@@ -1,5 +1,0 @@
-numpy>=1.24
-matplotlib>=3.7
-
-# Opcional: para usar GPU com CUDA
-cupy-cuda12x>=13.0 ; platform_system != "Darwin"
