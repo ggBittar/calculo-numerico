@@ -1,0 +1,378 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{placeins}
+\usepackage{array}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\geometry{left=3cm,right=2cm,top=3cm,bottom=2cm}
+\setlength{\headheight}{15pt}
+\hypersetup{colorlinks=true, linkcolor=black, urlcolor=blue, citecolor=black}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Métodos Numéricos}
+\lhead{Primeira Avaliação}
+\cfoot{\thepage}
+
+\lstdefinestyle{pythonstyle}{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue!70!black}\bfseries,
+    commentstyle=\color{green!40!black},
+    stringstyle=\color{red!50!black},
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    columns=fullflexible,
+    keepspaces=true
+}
+
+\newcommand{\arquivofig}[1]{%
+    \IfFileExists{figuras/#1}{%
+        \includegraphics[width=0.85\textwidth]{figuras/#1}%
+    }{%
+        \fbox{\parbox[c][6cm][c]{0.80\textwidth}{\centering Arquivo de figura não encontrado:\\ \texttt{\detokenize{#1}}}}%
+    }%
+}
+
+\title{Resolução da Primeira Avaliação de Métodos Numéricos}
+\author{Gustavo Bittar Gonçalves}
+\date{}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{fancy}
+
+\section{Questão 1 -- Equação governante com condutividade térmica constante}
+Para uma chapa bidimensional, transiente, sem geração interna de calor e com propriedades constantes, a equação governante da condução térmica é
+\begin{equation}
+\rho c_p \frac{\partial T}{\partial t} = k\left(\frac{\partial^2 T}{\partial x^2} + \frac{\partial^2 T}{\partial y^2}\right).
+\end{equation}
+Dividindo a equação por $\rho c_p$ e definindo a difusividade térmica como
+\begin{equation}
+\alpha = \frac{k}{\rho c_p},
+\end{equation}
+obtém-se
+\begin{equation}
+\frac{\partial T}{\partial t} = \alpha\left(\frac{\partial^2 T}{\partial x^2} + \frac{\partial^2 T}{\partial y^2}\right).
+\label{eq:governante_constante}
+\end{equation}
+
+As condições de contorno informadas no enunciado são:
+\begin{align}
+T(0,y,t) &= T_{\text{imp}}, && 0<y<L_y, \\
+\left.\frac{\partial T}{\partial x}\right|_{x=L_x} &= 0, && 0<y<L_y, \\
+k\left.\frac{\partial T}{\partial y}\right|_{y=0} &= h_b\bigl(T(x,0,t)-T_{\infty,b}\bigr), && 0<x<L_x,
+\end{align}
+\begin{equation}
+-k\left.\frac{\partial T}{\partial y}\right|_{y=L_y} = h_t\bigl(T(x,L_y,t)-T_{\infty,t}\bigr) + \varepsilon \sigma \left(T(x,L_y,t)^4 - T_{\text{viz}}^4\right), \quad 0<x<L_x,
+\end{equation}
+em que $h_b$ é o coeficiente convectivo da borda inferior, $h_t$ o coeficiente convectivo da borda superior, $\varepsilon$ a emissividade e $\sigma$ a constante de Stefan-Boltzmann.
+
+A condição inicial é
+\begin{equation}
+T(x,y,0)=300\,\text{K}, \qquad 0<x<L_x,\;0<y<L_y.
+\end{equation}
+
+\section{Questão 2 -- Equação governante com condutividade variável}
+Quando a condutividade varia linearmente com a temperatura,
+\begin{equation}
+k(T)=aT+b,
+\end{equation}
+a forma geral da equação de energia é
+\begin{equation}
+\rho c_p \frac{\partial T}{\partial t}=\nabla\cdot\bigl(k(T)\nabla T\bigr).
+\end{equation}
+Em coordenadas cartesianas bidimensionais,
+\begin{equation}
+\rho c_p \frac{\partial T}{\partial t}=
+\frac{\partial}{\partial x}\left[k(T)\frac{\partial T}{\partial x}\right]+
+\frac{\partial}{\partial y}\left[k(T)\frac{\partial T}{\partial y}\right].
+\label{eq:governante_variavel}
+\end{equation}
+Substituindo $k(T)=aT+b$,
+\begin{equation}
+\rho c_p \frac{\partial T}{\partial t}=
+\frac{\partial}{\partial x}\left[(aT+b)\frac{\partial T}{\partial x}\right]+
+\frac{\partial}{\partial y}\left[(aT+b)\frac{\partial T}{\partial y}\right].
+\end{equation}
+
+As condições de contorno mantêm a mesma estrutura da Questão 1, apenas substituindo $k$ por $k(T)$ nas fronteiras convectivas/radiativas:
+\begin{align}
+T(0,y,t) &= T_{\text{imp}}, \\
+\left.\frac{\partial T}{\partial x}\right|_{x=L_x} &= 0, \\
+k(T)\left.\frac{\partial T}{\partial y}\right|_{y=0} &= h_b\bigl(T(x,0,t)-T_{\infty,b}\bigr), \\
+-k(T)\left.\frac{\partial T}{\partial y}\right|_{y=L_y} &= h_t\bigl(T(x,L_y,t)-T_{\infty,t}\bigr) + \varepsilon \sigma \left(T(x,L_y,t)^4 - T_{\text{viz}}^4\right),
+\end{align}
+com condição inicial
+\begin{equation}
+T(x,y,0)=300\,\text{K}.
+\end{equation}
+
+\section{Questão 3 -- Discretização por diferenças finitas e Euler explícito}
+Considere a malha uniforme $(x_i,y_j)$, com
+\begin{equation}
+\Delta x = \frac{L_x}{N_x-1},
+\qquad
+\Delta y = \frac{L_y}{N_y-1},
+\qquad
+\Delta t = t^{n+1}-t^n.
+\end{equation}
+Seja $T_{i,j}^n$ a temperatura no nó $(i,j)$ no instante $t^n$.
+
+Para os pontos internos, aplicando diferenças finitas centrais de segunda ordem nos termos espaciais e Euler explícito no tempo à equação \eqref{eq:governante_constante}, resulta
+\begin{equation}
+\frac{T_{i,j}^{n+1}-T_{i,j}^{n}}{\Delta t}=
+\alpha\left[
+\frac{T_{i+1,j}^{n}-2T_{i,j}^{n}+T_{i-1,j}^{n}}{\Delta x^2}
++
+\frac{T_{i,j+1}^{n}-2T_{i,j}^{n}+T_{i,j-1}^{n}}{\Delta y^2}
+\right].
+\end{equation}
+Logo,
+\begin{equation}
+T_{i,j}^{n+1}=T_{i,j}^{n}+
+\alpha\Delta t\left[
+\frac{T_{i+1,j}^{n}-2T_{i,j}^{n}+T_{i-1,j}^{n}}{\Delta x^2}
++
+\frac{T_{i,j+1}^{n}-2T_{i,j}^{n}+T_{i,j-1}^{n}}{\Delta y^2}
+\right].
+\label{eq:interna}
+\end{equation}
+
+\subsection{Tratamento das condições de contorno}
+\subsubsection*{Borda esquerda: temperatura imposta em $x=0$}
+Nesta fronteira a condição é de Dirichlet:
+\begin{equation}
+T_{0,j}^{n+1}=T_{\text{imp}}.
+\end{equation}
+
+\subsubsection*{Borda direita: adiabática em $x=L_x$}
+A condição
+\begin{equation}
+\left.\frac{\partial T}{\partial x}\right|_{x=L_x}=0
+\end{equation}
+é implementada com nó fantasma, resultando em
+\begin{equation}
+\left.\frac{\partial^2 T}{\partial x^2}\right|_{i=N_x-1,j}
+\approx \frac{2\left(T_{N_x-2,j}^{n}-T_{N_x-1,j}^{n}\right)}{\Delta x^2}.
+\end{equation}
+Assim, na borda direita,
+\begin{equation}
+T_{N_x-1,j}^{n+1}=T_{N_x-1,j}^{n}+\alpha\Delta t\left[
+\frac{2\left(T_{N_x-2,j}^{n}-T_{N_x-1,j}^{n}\right)}{\Delta x^2}
++
+\frac{T_{N_x-1,j+1}^{n}-2T_{N_x-1,j}^{n}+T_{N_x-1,j-1}^{n}}{\Delta y^2}
+\right].
+\end{equation}
+
+\subsubsection*{Borda inferior: convecção em $y=0$}
+Da condição
+\begin{equation}
+k\left.\frac{\partial T}{\partial y}\right|_{y=0}=h_b\left(T-T_{\infty,b}\right),
+\end{equation}
+obtém-se, com eliminação do nó fantasma,
+\begin{equation}
+\left.\frac{\partial^2 T}{\partial y^2}\right|_{i,0}
+\approx
+\frac{2\left(T_{i,1}^{n}-T_{i,0}^{n}\right)}{\Delta y^2}
+-
+\frac{2h_b}{k\Delta y}\left(T_{i,0}^{n}-T_{\infty,b}\right).
+\end{equation}
+Portanto,
+\begin{equation}
+T_{i,0}^{n+1}=T_{i,0}^{n}+\alpha\Delta t\left[
+\frac{T_{i+1,0}^{n}-2T_{i,0}^{n}+T_{i-1,0}^{n}}{\Delta x^2}
++
+\frac{2\left(T_{i,1}^{n}-T_{i,0}^{n}\right)}{\Delta y^2}
+-
+\frac{2h_b}{k\Delta y}\left(T_{i,0}^{n}-T_{\infty,b}\right)
+\right].
+\end{equation}
+
+\subsubsection*{Borda superior: convecção + radiação em $y=L_y$}
+Na borda superior,
+\begin{equation}
+-k\left.\frac{\partial T}{\partial y}\right|_{y=L_y}=h_t\left(T-T_{\infty,t}\right)+\varepsilon\sigma\left(T^4-T_{\text{viz}}^4\right).
+\end{equation}
+Eliminando o nó fantasma, obtém-se
+\begin{equation}
+\left.\frac{\partial^2 T}{\partial y^2}\right|_{i,N_y-1}
+\approx
+\frac{2\left(T_{i,N_y-2}^{n}-T_{i,N_y-1}^{n}\right)}{\Delta y^2}
+-
+\frac{2}{k\Delta y}
+\left[
+ h_t\left(T_{i,N_y-1}^{n}-T_{\infty,t}\right)+\varepsilon\sigma\left(\left(T_{i,N_y-1}^{n}\right)^4-T_{\text{viz}}^4\right)
+\right].
+\end{equation}
+Dessa forma,
+\begin{equation}
+\begin{split}
+T_{i,N_y-1}^{n+1}=&T_{i,N_y-1}^{n}+\alpha\Delta t\left[
+\frac{T_{i+1,N_y-1}^{n}-2T_{i,N_y-1}^{n}+T_{i-1,N_y-1}^{n}}{\Delta x^2}
++
+\frac{2\left(T_{i,N_y-2}^{n}-T_{i,N_y-1}^{n}\right)}{\Delta y^2} -\\
+&-
+\frac{2}{k\Delta y}
+\left(
+ h_t\left(T_{i,N_y-1}^{n}-T_{\infty,t}\right)+\varepsilon\sigma\left(\left(T_{i,N_y-1}^{n}\right)^4-T_{\text{viz}}^4\right)
+\right)
+\right].
+\end{split}
+\end{equation}
+
+\subsection{Critério de estabilidade do esquema explícito}
+Para o método explícito de Euler em duas dimensões, um limite clássico de estabilidade é
+\begin{equation}
+\Delta t \leq \frac{1}{2\alpha\left(\frac{1}{\Delta x^2}+\frac{1}{\Delta y^2}\right)}.
+\end{equation}
+No programa, foi adotado um fator de segurança adicional para garantir estabilidade numérica.
+
+\section{Questão 4 -- Algoritmo numérico}
+O algoritmo para resolver o problema do item 3 pode ser descrito como segue:
+
+\begin{enumerate}
+    \item Definir as propriedades físicas do material e os parâmetros geométricos da chapa.
+    \item Definir as condições de contorno e a condição inicial.
+    \item Escolher a malha $(N_x,N_y)$ e calcular $\Delta x$, $\Delta y$ e $\Delta t$.
+    \item Inicializar a matriz de temperatura com $T=300$ K em todo o domínio e impor $T=400$ K em $x=0$.
+    \item Para cada passo temporal:
+    \begin{enumerate}
+        \item atualizar os nós internos pela Eq. \eqref{eq:interna};
+        \item atualizar a borda direita com a condição adiabática;
+        \item atualizar a borda inferior com convecção;
+        \item atualizar a borda superior com convecção e radiação;
+        \item atualizar os cantos combinando as condições adjacentes;
+        \item reimpor a condição de Dirichlet em $x=0$.
+    \end{enumerate}
+    \item Armazenar os campos de temperatura nos tempos pedidos: $0$, $1800$, $3600$, $7200$, $10800$ e $14400$ s.
+    \item Ao final de $4$ h, extrair os perfis pedidos e os históricos temporais nos pontos especificados.
+    \item Repetir o procedimento para as diferentes malhas solicitadas.
+\end{enumerate}
+
+\section{Questão 5 -- Implementação computacional}
+Foi utilizado um programa em Python para resolver o problema transiente. O código utiliza \texttt{NumPy} para a solução em CPU e tenta utilizar \texttt{CuPy/CUDA} quando disponível. O programa também salva automaticamente todas as figuras pedidas no enunciado.
+
+Nesta implementação foram adotados os seguintes dados do problema:
+\begin{center}
+\begin{tabular}{>{\raggedright\arraybackslash}p{7.0cm}c}
+\toprule
+\textbf{Parâmetro} & \textbf{Valor} \\
+\midrule
+Comprimento da chapa em $x$ & $L_x=1{,}0$ m \\
+Comprimento da chapa em $y$ & $L_y=1{,}0$ m \\
+Espessura & $5{,}0\times 10^{-3}$ m \\
+Condutividade térmica do alumínio & $k=237$ W/(m.K) \\
+Massa específica & $\rho=2700$ kg/m$^3$ \\
+Calor específico & $c_p=897$ J/(kg.K) \\
+Temperatura imposta em $x=0$ & $400$ K \\
+Temperatura inicial & $300$ K \\
+Convecção em $y=0$ & $h=100$ W/(m$^2$.K), $T_\infty=350$ K \\
+Convecção em $y=L_y$ & $h=200$ W/(m$^2$.K), $T_\infty=280$ K \\
+Radiação em $y=L_y$ & $\varepsilon=0{,}8$, $T_{\text{viz}}=300$ K \\
+Tempo final & $4$ h \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Resultados solicitados no item 5.1}
+As figuras abaixo foram organizadas conforme a nomenclatura mostrada nos arquivos gerados pelo programa. Caso as imagens estejam na pasta \texttt{figuras/}, o documento compilará exibindo os gráficos automaticamente.
+
+\subsection{Campos de temperatura para a malha de referência}
+\begin{figure}[H]
+\centering
+\arquivofig{campo_temperatura_t_00000.png}
+\caption{Campo de temperatura em $t=0$ s para a malha $N_x=N_y=10$.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\arquivofig{campo_temperatura_t_01800.png}
+\caption{Campo de temperatura em $t=1800$ s para a malha $N_x=N_y=10$.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\arquivofig{campo_temperatura_t_03600.png}
+\caption{Campo de temperatura em $t=3600$ s para a malha $N_x=N_y=10$.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\arquivofig{campo_temperatura_t_07200.png}
+\caption{Campo de temperatura em $t=7200$ s para a malha $N_x=N_y=10$.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\arquivofig{campo_temperatura_t_10800.png}
+\caption{Campo de temperatura em $t=10800$ s para a malha $N_x=N_y=10$.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\arquivofig{campo_temperatura_t_14400.png}
+\caption{Campo de temperatura em $t=14400$ s para a malha $N_x=N_y=10$.}
+\end{figure}
+
+
+\subsection{Perfis espaciais em \texorpdfstring{$t=4$ h}{t=4 h}}
+\begin{figure}[H]
+\centering
+\arquivofig{perfil_x_meio.png}
+\caption{Perfis de temperatura em \texorpdfstring{$x=L_x/2$}{x=Lx/2} para diferentes malhas.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\arquivofig{perfil_x_quarto.png}
+\caption{Perfis de temperatura em \texorpdfstring{$x=L_x/4$}{x=Lx/4} para diferentes malhas.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\arquivofig{perfil_y_meio.png}
+\caption{Perfis de temperatura em \texorpdfstring{$y=L_y/2$}{y=Ly/2} para diferentes malhas.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\arquivofig{perfil_y_tres_quartos.png}
+\caption{Perfis de temperatura em \texorpdfstring{$y=3L_y/4$}{y=3Ly/4} para diferentes malhas.}
+\end{figure}
+
+\subsection{Históricos temporais}
+\begin{figure}[H]
+\centering
+\arquivofig{historico_centro.png}
+\caption{Evolução temporal da temperatura em \texorpdfstring{$x=L_x/2$, $y=L_y/2$}{x=Lx/2, y=Ly/2} para diferentes malhas.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\arquivofig{historico_quarto.png}
+\caption{Evolução temporal da temperatura em \texorpdfstring{$x=L_x/4$, $y=L_y/4$}{x=Lx/4, y=Ly/4} para diferentes malhas.}
+\end{figure}
+
+\section{Conclusão}
+A formulação apresentada permite resolver a condução de calor bidimensional transiente com condições de contorno mistas, incluindo adiabática, convecção e convecção associada à radiação. A discretização por diferenças finitas centrais de segunda ordem no espaço e Euler explícito no tempo conduz a um algoritmo simples e direto, adequado para implementação computacional. O programa em Python automatiza a solução para várias malhas e gera todas as figuras exigidas pela avaliação, facilitando a análise de independência de malha e da evolução temporal do campo térmico.
+
+\appendix
+\appendix
+\section{Código-fonte em Python}
+
+\lstinputlisting[style=pythonstyle]{main.py}
+\end{document}
