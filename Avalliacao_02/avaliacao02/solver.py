@@ -32,8 +32,10 @@ class SimulationResult:
     Nx: int
     Ny: int
     C: float
+    C_requested: float
     dt: float
     using_cuda: bool
+    stability_limited: bool
     times: list[float]
     T_center: list[float]
     T_quarter: list[float]
@@ -50,15 +52,18 @@ class SimulationResult:
                 "Nx": self.Nx,
                 "Ny": self.Ny,
                 "C": self.C,
+                "C_requested": self.C_requested,
                 "dt_s": self.dt,
                 "cuda": self.using_cuda,
+                "C_ajustado": self.stability_limited,
             }
         )
 
     def save_csv(self, output_dir: Path) -> Path:
         """Salva as séries em CSV."""
         output_dir.mkdir(parents=True, exist_ok=True)
-        path = output_dir / f"serie_{self.method}_Nx{self.Nx}_Ny{self.Ny}_C{self.C:g}.csv"
+        suffix = f"_req{self.C_requested:g}" if self.stability_limited else ""
+        path = output_dir / f"serie_{self.method}_Nx{self.Nx}_Ny{self.Ny}_C{self.C:g}{suffix}.csv"
         self.to_dataframe().to_csv(path, index=False)
         return path
 
@@ -80,6 +85,8 @@ def run_simulation(
     Nx: int,
     Ny: int,
     C: float,
+    C_requested: float | None = None,
+    stability_limited: bool = False,
     xp: Any,
     using_cuda: bool,
     cfg: SimulationConfig,
@@ -136,8 +143,10 @@ def run_simulation(
         Nx=Nx,
         Ny=Ny,
         C=C,
+        C_requested=C if C_requested is None else C_requested,
         dt=dt,
         using_cuda=using_cuda,
+        stability_limited=stability_limited,
         times=times,
         T_center=T_center,
         T_quarter=T_quarter,

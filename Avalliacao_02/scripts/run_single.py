@@ -17,6 +17,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from avaliacao02.backend import get_array_module
 from avaliacao02.config import SimulationConfig
 from avaliacao02.solver import run_simulation
+from avaliacao02.stability import limit_c, max_stable_c
 from avaliacao02.time_methods import ALL_METHOD_NAMES
 
 
@@ -24,19 +25,25 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Executa uma simulação isolada.")
     parser.add_argument("--method", choices=ALL_METHOD_NAMES, default="rk4", help="Método temporal.")
     parser.add_argument("--N", type=int, default=20, help="Usa Nx=Ny=N.")
-    parser.add_argument("--C", type=float, default=0.25, help="Coeficiente C de estabilidade.")
+    parser.add_argument("--C", type=float, default=None, help="Coeficiente C de estabilidade.")
     parser.add_argument("--cpu", action="store_true", help="Força CPU/NumPy.")
     parser.add_argument("--cuda", action="store_true", help="Tenta usar CUDA/CuPy.")
     args = parser.parse_args()
 
     xp, using_cuda = get_array_module(prefer_cuda=not args.cpu)
     cfg = SimulationConfig(save_every_seconds=60.0)
+    requested_c = max_stable_c(args.method) if args.C is None else args.C
+    used_c, limited = limit_c(args.method, requested_c)
+    if limited:
+        print(f"[ajuste] método={args.method} C solicitado={requested_c:g} excede o limite; usando C={used_c:g}.")
 
     result = run_simulation(
         method=args.method,
         Nx=args.N,
         Ny=args.N,
-        C=args.C,
+        C=used_c,
+        C_requested=requested_c,
+        stability_limited=limited,
         xp=xp,
         using_cuda=using_cuda,
         cfg=cfg,

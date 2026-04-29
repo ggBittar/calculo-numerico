@@ -19,7 +19,9 @@ class SimulationTask:
     method: str
     Nx: int
     Ny: int
-    C: float
+    C_requested: float
+    C_used: float
+    stability_limited: bool
 
 
 @dataclass(frozen=True)
@@ -57,7 +59,9 @@ def _run_cpu_task(task: SimulationTask, cfg: SimulationConfig) -> SimulationResu
         method=task.method,
         Nx=task.Nx,
         Ny=task.Ny,
-        C=task.C,
+        C=task.C_used,
+        C_requested=task.C_requested,
+        stability_limited=task.stability_limited,
         xp=np,
         using_cuda=False,
         cfg=cfg,
@@ -93,7 +97,9 @@ def run_simulation_tasks(
                         method=task.method,
                         Nx=task.Nx,
                         Ny=task.Ny,
-                        C=task.C,
+                        C=task.C_used,
+                        C_requested=task.C_requested,
+                        stability_limited=task.stability_limited,
                         xp=xp,
                         using_cuda=True,
                         cfg=cfg,
@@ -106,7 +112,7 @@ def run_simulation_tasks(
                         method=task.method,
                         Nx=task.Nx,
                         Ny=task.Ny,
-                        C=task.C,
+                        C=task.C_requested,
                         error_type=type(exc).__name__,
                         error_message=str(exc),
                     )
@@ -131,7 +137,7 @@ def run_simulation_tasks(
                         method=task.method,
                         Nx=task.Nx,
                         Ny=task.Ny,
-                        C=task.C,
+                        C=task.C_requested,
                         error_type=type(exc).__name__,
                         error_message=str(exc),
                     )
@@ -163,7 +169,7 @@ def run_simulation_tasks(
                         method=task.method,
                         Nx=task.Nx,
                         Ny=task.Ny,
-                        C=task.C,
+                        C=task.C_requested,
                         error_type=type(exc).__name__,
                         error_message=str(exc),
                     )

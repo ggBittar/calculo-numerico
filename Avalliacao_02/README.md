@@ -79,6 +79,8 @@ python scripts/run_all.py --cpu --workers 6
 
 Observação: em `--cpu`, os casos independentes são distribuídos entre múltiplos processos.
 Em `--cuda`, a execução continua sequencial para evitar disputa pelo mesmo dispositivo GPU.
+O executor também aplica limites conservadores de estabilidade por método e ajusta
+automaticamente `C` quando necessário.
 
 ## Como executar um único caso
 
@@ -108,7 +110,12 @@ dt = C * min(dx, dy)^2 / alpha
 ```
 
 - Para Euler explícito, em malha uniforme 2D, recomenda-se `C <= 0,25`.
+- Para RK4, o projeto usa um teto conservador de `C <= 0,34`.
+- Para AB2, o projeto usa um teto conservador de `C <= 0,12`.
+- Para AB4, o projeto usa um teto conservador de `C <= 0,03`.
 - Os testes com `C = 0,5`, `0,25` e `0,125` são executados para RK4 e AB4 conforme o enunciado.
+  Quando esses valores excedem a faixa estável do método, o projeto reescala a
+  sequência automaticamente preservando as proporções relativas.
 - As propriedades do alumínio estão em `avaliacao02/config.py` e podem ser alteradas caso seja necessário usar uma tabela específica.
 
 ## Saídas

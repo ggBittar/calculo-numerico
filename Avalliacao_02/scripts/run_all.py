@@ -26,6 +26,7 @@ from avaliacao02.backend import get_array_module
 from avaliacao02.config import MESHES, STABILITY_COEFFICIENTS, SimulationConfig
 from avaliacao02.parallel import SimulationTask, default_worker_count, run_simulation_tasks
 from avaliacao02.plots import plot_mesh_comparison, plot_stability_comparison
+from avaliacao02.stability import limit_c, max_stable_c, scale_stability_coefficients
 from avaliacao02.time_methods import ALL_METHOD_NAMES
 
 
@@ -51,37 +52,49 @@ def build_tasks(C_default: float) -> list[SimulationTask]:
 
     for method in ALL_METHOD_NAMES:
         for N in MESHES:
+            used_c, limited = limit_c(method, C_default)
+            c_label = f"C={used_c:g}" if not limited else f"Csol={C_default:g} -> C={used_c:g}"
             tasks.append(
                 SimulationTask(
-                    label=f"[Q1] método={method:22s} Nx=Ny={N:2d} C={C_default:g}",
+                    label=f"[Q1] método={method:22s} Nx=Ny={N:2d} {c_label}",
                     method=method,
                     Nx=N,
                     Ny=N,
-                    C=C_default,
+                    C_requested=C_default,
+                    C_used=used_c,
+                    stability_limited=limited,
                 )
             )
 
-    for C in STABILITY_COEFFICIENTS:
+    for requested_c, used_c in scale_stability_coefficients("rk4", STABILITY_COEFFICIENTS):
         for N in MESHES:
+            limited = used_c < requested_c
+            c_label = f"C={used_c:g}" if not limited else f"Csol={requested_c:g} -> C={used_c:g}"
             tasks.append(
                 SimulationTask(
-                    label=f"[Q2] método=rk4                    Nx=Ny={N:2d} C={C:g}",
+                    label=f"[Q2] método=rk4                    Nx=Ny={N:2d} {c_label}",
                     method="rk4",
                     Nx=N,
                     Ny=N,
-                    C=C,
+                    C_requested=requested_c,
+                    C_used=used_c,
+                    stability_limited=limited,
                 )
             )
 
-    for C in STABILITY_COEFFICIENTS:
+    for requested_c, used_c in scale_stability_coefficients("ab4", STABILITY_COEFFICIENTS):
         for N in MESHES:
+            limited = used_c < requested_c
+            c_label = f"C={used_c:g}" if not limited else f"Csol={requested_c:g} -> C={used_c:g}"
             tasks.append(
                 SimulationTask(
-                    label=f"[Q3] método=ab4                    Nx=Ny={N:2d} C={C:g}",
+                    label=f"[Q3] método=ab4                    Nx=Ny={N:2d} {c_label}",
                     method="ab4",
                     Nx=N,
                     Ny=N,
-                    C=C,
+                    C_requested=requested_c,
+                    C_used=used_c,
+                    stability_limited=limited,
                 )
             )
 
@@ -108,6 +121,10 @@ def main() -> None:
     else:
         workers = args.workers if args.workers is not None else default_worker_count()
         print(f"Execução em CPU configurada com até {workers} workers.")
+    print(
+        "Limites conservadores: "
+        f"Euler/RK2=0.25, RK4={max_stable_c('rk4'):g}, AB2={max_stable_c('ab2'):g}, AB4={max_stable_c('ab4'):g}."
+    )
 
     tasks = build_tasks(C_default)
     batch = run_simulation_tasks(tasks, cfg=cfg, xp=xp, using_cuda=using_cuda, workers=args.workers)
@@ -125,7 +142,7 @@ def main() -> None:
                     "metodo": failure.method,
                     "Nx": failure.Nx,
                     "Ny": failure.Ny,
-                    "C": failure.C,
+                    "C_requested": failure.C,
                     "tipo_erro": failure.error_type,
                     "mensagem_erro": failure.error_message,
                 }
@@ -146,11 +163,12 @@ def main() -> None:
 
     # Figuras da Questão 1.
     for method in ALL_METHOD_NAMES:
-        plot_mesh_comparison(consolidated, method=method, C=C_default, output_dir=figuras_dir)
+        for C in sorted(consolidated[consolidated["metodo"] == method]["C"].unique()):
+            plot_mesh_comparison(consolidated, method=method, C=C, output_dir=figuras_dir)
 
     # Figuras das Questões 2 e 3.
     for method in ("rk4", "ab4"):
-        for C in STABILITY_COEFFICIENTS:
+        for C in sorted(consolidated[consolidated["metodo"] == method]["C"].unique()):
             plot_mesh_comparison(consolidated, method=method, C=C, output_dir=figuras_dir)
         plot_stability_comparison(consolidated, method=method, Nx=20, Ny=20, output_dir=figuras_dir)
 
