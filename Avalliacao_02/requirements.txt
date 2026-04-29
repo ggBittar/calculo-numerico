@@ -1,0 +1,8 @@
+numpy>=1.26
+matplotlib>=3.8
+pandas>=2.1
+# Instale uma versão do CuPy compatível com seu CUDA.
+# Exemplos:
+#   pip install cupy-cuda12x
+#   pip install cupy-cuda11x
+# O código tenta usar CuPy automaticamente e cai para NumPy se CuPy não estiver instalado.
