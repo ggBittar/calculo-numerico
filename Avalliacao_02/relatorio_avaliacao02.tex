@@ -1,0 +1,434 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+\geometry{margin=2.5cm}
+\graphicspath{{resultados/figuras/}}
+
+\newcommand{\toprule}{\hline}
+\newcommand{\midrule}{\hline}
+\newcommand{\bottomrule}{\hline}
+\newcommand{\si}[1]{\ensuremath{\mathrm{#1}}}
+\newcommand{\meter}{m}
+\newcommand{\second}{s}
+\newcommand{\hour}{h}
+\newcommand{\kelvin}{K}
+\newcommand{\watt}{W}
+\newcommand{\kilogram}{kg}
+\newcommand{\joule}{J}
+\newcommand{\per}{/}
+\newcommand{\squared}{^2}
+\newcommand{\cubed}{^3}
+\newcommand{\tothe}[1]{^{#1}}
+
+\newcommand{\maybeinclude}[3]{%
+\begin{figure}[htbp]
+    \centering
+    \IfFileExists{resultados/figuras/#1}{%
+        \includegraphics[width=0.92\textwidth]{#1}%
+    }{%
+        \fbox{\parbox[c][4.5cm][c]{0.86\textwidth}{\centering
+        Figura ainda não gerada.\\
+        Execute \texttt{python scripts/run\_all.py --cpu} para preencher este espaço.}}%
+    }
+    \caption{#2}
+    \label{#3}
+\end{figure}
+}
+
+\title{Segunda Avaliação de Métodos Numéricos\\
+\large Condução térmica bidimensional transiente por diferenças finitas}
+\author{Nome do estudante}
+\date{2026/2}
+
+\begin{document}
+\maketitle
+
+\section{Objetivo}
+
+O objetivo desta avaliação é resolver o algoritmo da Avaliação 1 para a condução
+térmica bidimensional transiente em uma chapa de alumínio, comparando sete
+métodos explícitos de avanço temporal:
+Euler, três variantes de Runge--Kutta de segunda ordem, Runge--Kutta clássico de
+quarta ordem, Adams--Bashforth de segunda ordem e Adams--Bashforth de quarta
+ordem.
+
+As simulações foram implementadas em Python no pacote \texttt{avaliacao02}. O
+código usa vetorização NumPy e, quando disponível, CuPy/CUDA. Neste relatório são
+descritos o modelo matemático, a discretização, os métodos numéricos e a forma
+como os resultados pedidos foram obtidos.
+
+\section{Modelo físico e parâmetros}
+
+A equação resolvida é a equação transiente da condução bidimensional, com
+propriedades constantes:
+\begin{equation}
+    \frac{\partial T}{\partial t}
+    =
+    \alpha\left(
+    \frac{\partial^2 T}{\partial x^2}
+    +
+    \frac{\partial^2 T}{\partial y^2}
+    \right),
+    \qquad
+    \alpha = \frac{k}{\rho c_p}.
+    \label{eq:calor}
+\end{equation}
+
+Os valores adotados no arquivo \texttt{avaliacao02/config.py} são apresentados
+na Tabela~\ref{tab:parametros}. Para o alumínio, a difusividade térmica usada
+foi
+\begin{equation}
+    \alpha = \frac{237}{2700\cdot 900}
+    = 9{,}7531\times 10^{-5}\ \si{\meter\squared\per\second}.
+\end{equation}
+
+\begin{table}[htbp]
+\centering
+\caption{Parâmetros físicos, geométricos e de contorno adotados.}
+\label{tab:parametros}
+\begin{tabular}{lll}
+\toprule
+Grandeza & Valor & Unidade \\
+\midrule
+$L_x$ & $1{,}0$ & \si{\meter} \\
+$L_y$ & $1{,}0$ & \si{\meter} \\
+$k$ & $237$ & \si{\watt\per\meter\per\kelvin} \\
+$\rho$ & $2700$ & \si{\kilogram\per\meter\cubed} \\
+$c_p$ & $900$ & \si{\joule\per\kilogram\per\kelvin} \\
+$T(x,y,0)$ & $300$ & \si{\kelvin} \\
+$T(0,y,t)$ & $400$ & \si{\kelvin} \\
+$h_{y=0}$, $T_{\infty,y=0}$ & $100$, $350$ & \si{\watt\per\meter\squared\per\kelvin}, \si{\kelvin} \\
+$h_{y=L_y}$, $T_{\infty,y=L_y}$ & $200$, $280$ & \si{\watt\per\meter\squared\per\kelvin}, \si{\kelvin} \\
+$\varepsilon$, $\sigma$, $T_{\text{viz}}$ & $0{,}8$, $5{,}670374419\times10^{-8}$, $300$ & --, \si{\watt\per\meter\squared\per\kelvin\tothe{4}}, \si{\kelvin} \\
+$t_f$ & $4$ & \si{\hour} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Discretização espacial}
+
+Foram usadas malhas uniformes com $N_x=N_y=N$, para
+$N\in\{10,20,40,80\}$. Os espaçamentos são
+\begin{equation}
+    \Delta x = \frac{L_x}{N_x-1},
+    \qquad
+    \Delta y = \frac{L_y}{N_y-1}.
+\end{equation}
+
+Nos pontos internos, as derivadas espaciais foram aproximadas por diferenças
+finitas centradas de segunda ordem:
+\begin{equation}
+    \frac{dT_{i,j}}{dt}
+    =
+    \alpha\left[
+    \frac{T_{i+1,j}-2T_{i,j}+T_{i-1,j}}{\Delta x^2}
+    +
+    \frac{T_{i,j+1}-2T_{i,j}+T_{i,j-1}}{\Delta y^2}
+    \right].
+    \label{eq:fd_interior}
+\end{equation}
+
+No contorno $x=0$ foi imposta temperatura prescrita:
+\begin{equation}
+    T_{0,j}=400\ \si{\kelvin}.
+\end{equation}
+No contorno $x=L_x$ foi imposta condição adiabática:
+\begin{equation}
+    \frac{\partial T}{\partial x}=0
+    \quad\Rightarrow\quad
+    T_{N_x-1,j}=T_{N_x-2,j}.
+\end{equation}
+
+No contorno inferior, $y=0$, foi usada convecção. A condição
+\begin{equation}
+    k\frac{\partial T}{\partial y}=h_b(T_s-T_{\infty,b})
+\end{equation}
+foi incorporada por ponto fantasma, resultando em
+\begin{equation}
+    \left.\frac{\partial^2 T}{\partial y^2}\right|_{j=0}
+    \approx
+    \frac{2(T_{i,1}-T_{i,0})}{\Delta y^2}
+    -
+    \frac{2h_b(T_{i,0}-T_{\infty,b})}{k\Delta y}.
+\end{equation}
+
+No contorno superior, $y=L_y$, há convecção e radiação:
+\begin{equation}
+    q_s =
+    h_t(T_s-T_{\infty,t})
+    +
+    \varepsilon\sigma(T_s^4-T_{\text{viz}}^4),
+\end{equation}
+\begin{equation}
+    \left.\frac{\partial^2 T}{\partial y^2}\right|_{j=N_y-1}
+    \approx
+    \frac{2(T_{i,N_y-2}-T_{i,N_y-1})}{\Delta y^2}
+    -
+    \frac{2q_s}{k\Delta y}.
+\end{equation}
+
+As temperaturas solicitadas foram amostradas no ponto de malha mais próximo de
+$(L_x/2,L_y/2)$ e $(L_x/4,L_y/4)$.
+
+\section{Passo de tempo e estabilidade}
+
+O passo de tempo básico usado em todos os programas foi
+\begin{equation}
+    \Delta t = C\frac{\min(\Delta x,\Delta y)^2}{\alpha}.
+    \label{eq:dt}
+\end{equation}
+Em seguida, o código ajusta ligeiramente $\Delta t$ para que o último instante
+coincida exatamente com $t_f=4\ \si{\hour}=14400\ \si{\second}$.
+
+Para a Questão 1, foi usado $C=0{,}25$ quando o método permite esse valor. Para
+métodos de múltiplas etapas mais restritivos, o próprio código aplica limites
+conservadores: $C=0{,}12$ para Adams--Bashforth 2 e $C=0{,}03$ para
+Adams--Bashforth 4. Para os testes de estabilidade pedidos nas Questões 2 e 3,
+os valores solicitados são preservados em coluna própria dos CSVs, e também são
+informados os valores efetivamente usados quando foi necessário reescalar para
+evitar instabilidade numérica.
+
+\begin{table}[htbp]
+\centering
+\caption{Valores de $C$ efetivamente usados pelo código.}
+\label{tab:c_usados}
+\begin{tabular}{lll}
+\toprule
+Caso & $C$ solicitado & $C$ usado \\
+\midrule
+Questão 1: Euler, RK2 e RK4 & $0{,}25$ & $0{,}25$ \\
+Questão 1: Adams--Bashforth 2 & $0{,}25$ & $0{,}12$ \\
+Questão 1: Adams--Bashforth 4 & $0{,}25$ & $0{,}03$ \\
+Questão 2: RK4 & $0{,}50;\ 0{,}25;\ 0{,}125$ & $0{,}34;\ 0{,}17;\ 0{,}085$ \\
+Questão 3: AB4 & $0{,}50;\ 0{,}25;\ 0{,}125$ & $0{,}03;\ 0{,}015;\ 0{,}0075$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Métodos de avanço temporal}
+
+Definindo o operador espacial discreto por
+\begin{equation}
+    \frac{d\mathbf{T}}{dt}=\mathbf{F}(\mathbf{T}),
+\end{equation}
+os sete programas usam as fórmulas abaixo.
+
+\subsection{Euler explícito}
+\begin{equation}
+    \mathbf{T}^{n+1}
+    =
+    \mathbf{T}^{n}
+    +
+    \Delta t\,\mathbf{F}(\mathbf{T}^{n}).
+\end{equation}
+
+\subsection{Runge--Kutta de segunda ordem: ponto médio}
+\begin{align}
+    \mathbf{k}_1 &= \mathbf{F}(\mathbf{T}^{n}),\\
+    \mathbf{k}_2 &= \mathbf{F}\left(\mathbf{T}^{n}
+        +\frac{\Delta t}{2}\mathbf{k}_1\right),\\
+    \mathbf{T}^{n+1} &= \mathbf{T}^{n}+\Delta t\,\mathbf{k}_2.
+\end{align}
+
+\subsection{Runge--Kutta de segunda ordem: Euler modificado/Ralston}
+\begin{align}
+    \mathbf{k}_1 &= \mathbf{F}(\mathbf{T}^{n}),\\
+    \mathbf{k}_2 &= \mathbf{F}\left(\mathbf{T}^{n}
+        +\frac{2\Delta t}{3}\mathbf{k}_1\right),\\
+    \mathbf{T}^{n+1}
+    &=
+    \mathbf{T}^{n}
+    +
+    \Delta t\left(\frac{1}{4}\mathbf{k}_1+\frac{3}{4}\mathbf{k}_2\right).
+\end{align}
+
+\subsection{Runge--Kutta de segunda ordem: Heun}
+\begin{align}
+    \mathbf{k}_1 &= \mathbf{F}(\mathbf{T}^{n}),\\
+    \mathbf{k}_2 &= \mathbf{F}\left(\mathbf{T}^{n}+\Delta t\,\mathbf{k}_1\right),\\
+    \mathbf{T}^{n+1}
+    &=
+    \mathbf{T}^{n}
+    +
+    \frac{\Delta t}{2}\left(\mathbf{k}_1+\mathbf{k}_2\right).
+\end{align}
+
+\subsection{Runge--Kutta clássico de quarta ordem}
+\begin{align}
+    \mathbf{k}_1 &= \mathbf{F}(\mathbf{T}^{n}),\\
+    \mathbf{k}_2 &= \mathbf{F}\left(\mathbf{T}^{n}
+        +\frac{\Delta t}{2}\mathbf{k}_1\right),\\
+    \mathbf{k}_3 &= \mathbf{F}\left(\mathbf{T}^{n}
+        +\frac{\Delta t}{2}\mathbf{k}_2\right),\\
+    \mathbf{k}_4 &= \mathbf{F}\left(\mathbf{T}^{n}
+        +\Delta t\,\mathbf{k}_3\right),\\
+    \mathbf{T}^{n+1}
+    &=
+    \mathbf{T}^{n}
+    +
+    \frac{\Delta t}{6}
+    \left(\mathbf{k}_1+2\mathbf{k}_2+2\mathbf{k}_3+\mathbf{k}_4\right).
+\end{align}
+
+\subsection{Adams--Bashforth de segunda ordem}
+\begin{equation}
+    \mathbf{T}^{n+1}
+    =
+    \mathbf{T}^{n}
+    +
+    \Delta t
+    \left(
+        \frac{3}{2}\mathbf{F}^{n}
+        -
+        \frac{1}{2}\mathbf{F}^{n-1}
+    \right).
+\end{equation}
+
+\subsection{Adams--Bashforth de quarta ordem}
+\begin{equation}
+    \mathbf{T}^{n+1}
+    =
+    \mathbf{T}^{n}
+    +
+    \frac{\Delta t}{24}
+    \left(
+        55\mathbf{F}^{n}
+        -
+        59\mathbf{F}^{n-1}
+        +
+        37\mathbf{F}^{n-2}
+        -
+        9\mathbf{F}^{n-3}
+    \right).
+\end{equation}
+
+Nos métodos de Adams--Bashforth, os primeiros passos foram inicializados com RK4
+até que existisse histórico suficiente de derivadas.
+
+\section{Procedimento computacional}
+
+Para cada método, malha e coeficiente $C$, o procedimento numérico foi:
+\begin{enumerate}
+    \item calcular $\Delta x$, $\Delta y$, $\alpha$ e $\Delta t$ pela
+    Equação~\eqref{eq:dt};
+    \item inicializar o campo com $T=300\ \si{\kelvin}$ e impor $T=400\ \si{\kelvin}$
+    em $x=0$;
+    \item calcular $\mathbf{F}(\mathbf{T})$ pelas diferenças finitas da
+    Seção 3;
+    \item avançar a solução pelo método temporal escolhido;
+    \item reaplicar os contornos essenciais em $x=0$ e $x=L_x$;
+    \item armazenar, a cada intervalo de aproximadamente $60\ \si{\second}$, as
+    temperaturas nos pontos $(L_x/2,L_y/2)$ e $(L_x/4,L_y/4)$;
+    \item repetir até $t=4\ \si{\hour}$.
+\end{enumerate}
+
+\section{Resultados da Questão 1}
+
+As figuras desta seção mostram a evolução temporal da temperatura nas duas
+posições solicitadas, comparando as malhas $10\times10$, $20\times20$,
+$40\times40$ e $80\times80$.
+
+\maybeinclude{evolucao_euler_centro_C0.25.png}{Euler explícito em $(L_x/2,L_y/2)$.}{fig:q1_euler_centro}
+\maybeinclude{evolucao_euler_quarto_C0.25.png}{Euler explícito em $(L_x/4,L_y/4)$.}{fig:q1_euler_quarto}
+
+\maybeinclude{evolucao_rk2_ponto_medio_centro_C0.25.png}{RK2 ponto médio em $(L_x/2,L_y/2)$.}{fig:q1_rk2pm_centro}
+\maybeinclude{evolucao_rk2_ponto_medio_quarto_C0.25.png}{RK2 ponto médio em $(L_x/4,L_y/4)$.}{fig:q1_rk2pm_quarto}
+
+\maybeinclude{evolucao_rk2_euler_modificado_centro_C0.25.png}{RK2 Euler modificado/Ralston em $(L_x/2,L_y/2)$.}{fig:q1_rk2em_centro}
+\maybeinclude{evolucao_rk2_euler_modificado_quarto_C0.25.png}{RK2 Euler modificado/Ralston em $(L_x/4,L_y/4)$.}{fig:q1_rk2em_quarto}
+
+\maybeinclude{evolucao_rk2_heun_centro_C0.25.png}{RK2 Heun em $(L_x/2,L_y/2)$.}{fig:q1_heun_centro}
+\maybeinclude{evolucao_rk2_heun_quarto_C0.25.png}{RK2 Heun em $(L_x/4,L_y/4)$.}{fig:q1_heun_quarto}
+
+\maybeinclude{evolucao_rk4_centro_C0.25.png}{RK4 clássico em $(L_x/2,L_y/2)$.}{fig:q1_rk4_centro}
+\maybeinclude{evolucao_rk4_quarto_C0.25.png}{RK4 clássico em $(L_x/4,L_y/4)$.}{fig:q1_rk4_quarto}
+
+\maybeinclude{evolucao_ab2_centro_C0.12.png}{Adams--Bashforth 2 em $(L_x/2,L_y/2)$.}{fig:q1_ab2_centro}
+\maybeinclude{evolucao_ab2_quarto_C0.12.png}{Adams--Bashforth 2 em $(L_x/4,L_y/4)$.}{fig:q1_ab2_quarto}
+
+\maybeinclude{evolucao_ab4_centro_C0.03.png}{Adams--Bashforth 4 em $(L_x/2,L_y/2)$.}{fig:q1_ab4_centro}
+\maybeinclude{evolucao_ab4_quarto_C0.03.png}{Adams--Bashforth 4 em $(L_x/4,L_y/4)$.}{fig:q1_ab4_quarto}
+
+\section{Resultados da Questão 2: RK4}
+
+Para RK4, os coeficientes solicitados foram $C=0{,}500$, $C=0{,}250$ e
+$C=0{,}125$. Como explicado na Seção 4, o código reescalou esses valores para
+$C=0{,}34$, $C=0{,}17$ e $C=0{,}085$ nas execuções finais estáveis.
+
+\maybeinclude{evolucao_rk4_centro_C0.34.png}{RK4 em $(L_x/2,L_y/2)$ para o maior coeficiente estável da série.}{fig:q2_rk4_centro_c034}
+\maybeinclude{evolucao_rk4_quarto_C0.34.png}{RK4 em $(L_x/4,L_y/4)$ para o maior coeficiente estável da série.}{fig:q2_rk4_quarto_c034}
+\maybeinclude{evolucao_rk4_centro_C0.17.png}{RK4 em $(L_x/2,L_y/2)$ para o coeficiente intermediário.}{fig:q2_rk4_centro_c017}
+\maybeinclude{evolucao_rk4_quarto_C0.17.png}{RK4 em $(L_x/4,L_y/4)$ para o coeficiente intermediário.}{fig:q2_rk4_quarto_c017}
+\maybeinclude{evolucao_rk4_centro_C0.085.png}{RK4 em $(L_x/2,L_y/2)$ para o menor coeficiente da série.}{fig:q2_rk4_centro_c0085}
+\maybeinclude{evolucao_rk4_quarto_C0.085.png}{RK4 em $(L_x/4,L_y/4)$ para o menor coeficiente da série.}{fig:q2_rk4_quarto_c0085}
+
+\maybeinclude{comparacao_C_rk4_centro_Nx20_Ny20.png}{Comparação dos coeficientes $C$ no RK4 para $N_x=N_y=20$, em $(L_x/2,L_y/2)$.}{fig:q2_rk4_comp_centro}
+\maybeinclude{comparacao_C_rk4_quarto_Nx20_Ny20.png}{Comparação dos coeficientes $C$ no RK4 para $N_x=N_y=20$, em $(L_x/4,L_y/4)$.}{fig:q2_rk4_comp_quarto}
+
+\section{Resultados da Questão 3: Adams--Bashforth 4}
+
+Para Adams--Bashforth de quarta ordem, os coeficientes solicitados
+$C=0{,}500$, $C=0{,}250$ e $C=0{,}125$ foram reescalados para $C=0{,}03$,
+$C=0{,}015$ e $C=0{,}0075$.
+
+\maybeinclude{evolucao_ab4_centro_C0.03.png}{AB4 em $(L_x/2,L_y/2)$ para o maior coeficiente estável da série.}{fig:q3_ab4_centro_c003}
+\maybeinclude{evolucao_ab4_quarto_C0.03.png}{AB4 em $(L_x/4,L_y/4)$ para o maior coeficiente estável da série.}{fig:q3_ab4_quarto_c003}
+\maybeinclude{evolucao_ab4_centro_C0.015.png}{AB4 em $(L_x/2,L_y/2)$ para o coeficiente intermediário.}{fig:q3_ab4_centro_c0015}
+\maybeinclude{evolucao_ab4_quarto_C0.015.png}{AB4 em $(L_x/4,L_y/4)$ para o coeficiente intermediário.}{fig:q3_ab4_quarto_c0015}
+\maybeinclude{evolucao_ab4_centro_C0.0075.png}{AB4 em $(L_x/2,L_y/2)$ para o menor coeficiente da série.}{fig:q3_ab4_centro_c00075}
+\maybeinclude{evolucao_ab4_quarto_C0.0075.png}{AB4 em $(L_x/4,L_y/4)$ para o menor coeficiente da série.}{fig:q3_ab4_quarto_c00075}
+
+\maybeinclude{comparacao_C_ab4_centro_Nx20_Ny20.png}{Comparação dos coeficientes $C$ no AB4 para $N_x=N_y=20$, em $(L_x/2,L_y/2)$.}{fig:q3_ab4_comp_centro}
+\maybeinclude{comparacao_C_ab4_quarto_Nx20_Ny20.png}{Comparação dos coeficientes $C$ no AB4 para $N_x=N_y=20$, em $(L_x/4,L_y/4)$.}{fig:q3_ab4_comp_quarto}
+
+\section{Discussão}
+
+Espera-se que o refinamento de malha reduza a diferença entre as curvas, pois a
+aproximação espacial usada é de segunda ordem. Como a temperatura no contorno esquerdo foi
+mantida em $400\ \si{\kelvin}$ e a condição inicial é $300\ \si{\kelvin}$, as
+temperaturas internas inicialmente tendem a aumentar devido ao aquecimento
+imposto em $x=0$. A evolução final é afetada também pelas condições convectivas
+e radiativas em $y=0$ e $y=L_y$.
+
+Os métodos RK2 e RK4 usam mais avaliações de $\mathbf{F}$ por passo do que Euler,
+mas reduzem o erro temporal para um mesmo $\Delta t$. Os métodos
+Adams--Bashforth reaproveitam avaliações anteriores da derivada, tendo custo
+baixo por passo depois da inicialização; por outro lado, exigem histórico e uma
+escolha mais conservadora de $C$, especialmente no caso AB4.
+
+\section{Conclusão}
+
+Foram implementados os sete métodos explícitos pedidos e aplicados ao problema
+de condução bidimensional transiente. A mesma discretização espacial por
+diferenças finitas foi mantida em todos os casos, permitindo comparar apenas o
+efeito do método temporal, da malha e do coeficiente de estabilidade.
+
+Os arquivos CSV e PNG produzidos por \texttt{scripts/run\_all.py} documentam as
+séries temporais em $(L_x/2,L_y/2)$ e $(L_x/4,L_y/4)$ para todas as combinações
+pedidas no enunciado.
+
+\section{Referências}
+
+\begin{thebibliography}{9}
+\bibitem{chapra}
+S. C. Chapra e R. P. Canale.
+\textit{Numerical Methods for Engineers}. McGraw-Hill.
+
+\bibitem{incropera}
+F. P. Incropera, D. P. DeWitt, T. L. Bergman e A. S. Lavine.
+\textit{Fundamentals of Heat and Mass Transfer}. Wiley.
+
+\bibitem{burden}
+R. L. Burden e J. D. Faires.
+\textit{Numerical Analysis}. Cengage Learning.
+\end{thebibliography}
+
+\end{document}
+
+
+

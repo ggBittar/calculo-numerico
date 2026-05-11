@@ -128,6 +128,17 @@ Após `run_all.py`, são gerados:
   - `x=Lx/2, y=Ly/2`
   - `x=Lx/4, y=Ly/4`
 
+## Como gerar o PDF do relatório
+
+A partir da pasta raiz da Avaliação 02:
+
+```bash
+pdflatex -interaction=nonstopmode -halt-on-error relatorio_avaliacao02.tex
+```
+
+Se quiser atualizar as referências internas do LaTeX, execute o mesmo comando
+duas vezes.
+
 ## Programas separados por método
 
 Além do executor geral, há um script individual para cada método, atendendo à exigência de programas separados:
