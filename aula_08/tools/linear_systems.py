@@ -135,6 +135,20 @@ def _retrossubstituicao(matriz: Matrix, vetor: Vector) -> Vector:
     return solucao
 
 
+def _substituicao_direta(matriz: Matrix, vetor: Vector) -> Vector:
+    n = len(matriz)
+    solucao = [0.0] * n
+
+    for i in range(n):
+        soma = sum(matriz[i][j] * solucao[j] for j in range(i))
+        piv = matriz[i][i]
+        if abs(piv) < 1e-12:
+            raise ValueError("Sistema singular ou mal condicionado para a tolerancia adotada.")
+        solucao[i] = (vetor[i] - soma) / piv
+
+    return solucao
+
+
 def gauss_serial(matriz: Matrix, vetor: Vector) -> Vector:
     a, b = _copiar_sistema(matriz, vetor)
     n = len(a)
@@ -156,6 +170,56 @@ def gauss_serial(matriz: Matrix, vetor: Vector) -> Vector:
     return _retrossubstituicao(a, b)
 
 
+def _aplicar_permutacao(vetor: Vector, permutacoes: list[int]) -> Vector:
+    return [vetor[indice] for indice in permutacoes]
+
+
+def _extrair_lu(fatores: Matrix) -> tuple[Matrix, Matrix]:
+    n = len(fatores)
+    l = [[0.0] * n for _ in range(n)]
+    u = [[0.0] * n for _ in range(n)]
+
+    for i in range(n):
+        l[i][i] = 1.0
+        for j in range(n):
+            if i > j:
+                l[i][j] = fatores[i][j]
+            else:
+                u[i][j] = fatores[i][j]
+
+    return l, u
+
+
+def decomposicao_lu_serial(matriz: Matrix) -> tuple[Matrix, Matrix, list[int]]:
+    fatores = [linha[:] for linha in matriz]
+    n = len(fatores)
+    permutacoes = list(range(n))
+
+    for k in range(n - 1):
+        piv = _indice_pivo(fatores, k)
+        if abs(fatores[piv][k]) < 1e-12:
+            raise ValueError("Nao foi possivel encontrar pivo valido.")
+
+        if piv != k:
+            fatores[k], fatores[piv] = fatores[piv], fatores[k]
+            permutacoes[k], permutacoes[piv] = permutacoes[piv], permutacoes[k]
+
+        for i in range(k + 1, n):
+            fator = fatores[i][k] / fatores[k][k]
+            fatores[i][k] = fator
+            for j in range(k + 1, n):
+                fatores[i][j] -= fator * fatores[k][j]
+
+    return *_extrair_lu(fatores), permutacoes
+
+
+def lu_serial(matriz: Matrix, vetor: Vector) -> Vector:
+    l, u, permutacoes = decomposicao_lu_serial(matriz)
+    b_permutado = _aplicar_permutacao(vetor, permutacoes)
+    y = _substituicao_direta(l, b_permutado)
+    return _retrossubstituicao(u, y)
+
+
 def _eliminar_bloco(
     linhas: list[tuple[int, list[float], float]],
     linha_pivo: list[float],
@@ -175,6 +239,24 @@ def _eliminar_bloco(
     return atualizadas
 
 
+def _eliminar_bloco_lu(
+    linhas: list[tuple[int, list[float]]],
+    linha_pivo: list[float],
+    coluna_pivo: int,
+) -> list[tuple[int, list[float]]]:
+    atualizadas: list[tuple[int, list[float]]] = []
+
+    for indice, linha in linhas:
+        fator = linha[coluna_pivo] / linha_pivo[coluna_pivo]
+        nova_linha = linha[:]
+        nova_linha[coluna_pivo] = fator
+        for j in range(coluna_pivo + 1, len(nova_linha)):
+            nova_linha[j] -= fator * linha_pivo[j]
+        atualizadas.append((indice, nova_linha))
+
+    return atualizadas
+
+
 def _dividir_em_blocos(
     a: Matrix,
     b: Vector,
@@ -182,6 +264,19 @@ def _dividir_em_blocos(
     blocos: int,
 ) -> list[list[tuple[int, list[float], float]]]:
     linhas = [(i, a[i], b[i]) for i in range(inicio, len(a))]
+    if not linhas:
+        return []
+
+    tamanho_bloco = math.ceil(len(linhas) / blocos)
+    return [linhas[i : i + tamanho_bloco] for i in range(0, len(linhas), tamanho_bloco)]
+
+
+def _dividir_linhas_em_blocos(
+    a: Matrix,
+    inicio: int,
+    blocos: int,
+) -> list[list[tuple[int, list[float]]]]:
+    linhas = [(i, a[i]) for i in range(inicio, len(a))]
     if not linhas:
         return []
 
@@ -225,6 +320,54 @@ def gauss_parallel_cpu(
     return _retrossubstituicao(a, b)
 
 
+def decomposicao_lu_parallel_cpu(
+    matriz: Matrix,
+    max_workers: int | None = None,
+) -> tuple[Matrix, Matrix, list[int]]:
+    fatores = [linha[:] for linha in matriz]
+    n = len(fatores)
+    permutacoes = list(range(n))
+    workers = max_workers or os.cpu_count() or 1
+
+    if workers <= 1 or n < 32:
+        return decomposicao_lu_serial(fatores)
+
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        for k in range(n - 1):
+            piv = _indice_pivo(fatores, k)
+            if abs(fatores[piv][k]) < 1e-12:
+                raise ValueError("Nao foi possivel encontrar pivo valido.")
+
+            if piv != k:
+                fatores[k], fatores[piv] = fatores[piv], fatores[k]
+                permutacoes[k], permutacoes[piv] = permutacoes[piv], permutacoes[k]
+
+            blocos = _dividir_linhas_em_blocos(fatores, k + 1, workers)
+            if not blocos:
+                continue
+
+            futuros = [
+                executor.submit(_eliminar_bloco_lu, bloco, fatores[k], k)
+                for bloco in blocos
+            ]
+            for futuro in futuros:
+                for indice, nova_linha in futuro.result():
+                    fatores[indice] = nova_linha
+
+    return *_extrair_lu(fatores), permutacoes
+
+
+def lu_parallel_cpu(
+    matriz: Matrix,
+    vetor: Vector,
+    max_workers: int | None = None,
+) -> Vector:
+    l, u, permutacoes = decomposicao_lu_parallel_cpu(matriz, max_workers=max_workers)
+    b_permutado = _aplicar_permutacao(vetor, permutacoes)
+    y = _substituicao_direta(l, b_permutado)
+    return _retrossubstituicao(u, y)
+
+
 if cuda is not None:
 
     @cuda.jit
@@ -238,6 +381,17 @@ if cuda is not None:
         for j in range(coluna_pivo + 1, n):
             matriz[i, j] -= fator * linha_pivo[j]
         vetor[i] -= fator * valor_pivo_b
+
+    @cuda.jit
+    def _kernel_eliminacao_lu(matriz, linha_pivo, coluna_pivo, n):
+        i = cuda.grid(1) + coluna_pivo + 1
+        if i >= n:
+            return
+
+        fator = matriz[i, coluna_pivo] / linha_pivo[coluna_pivo]
+        matriz[i, coluna_pivo] = fator
+        for j in range(coluna_pivo + 1, n):
+            matriz[i, j] -= fator * linha_pivo[j]
 
 
 def gauss_gpu_cuda(matriz: Matrix, vetor: Vector) -> Vector:
@@ -302,6 +456,68 @@ def gauss_gpu_cuda(matriz: Matrix, vetor: Vector) -> Vector:
     a_final = d_a.copy_to_host().tolist()
     b_final = d_b.copy_to_host().tolist()
     return _retrossubstituicao(a_final, b_final)
+
+
+def decomposicao_lu_gpu_cuda(matriz: Matrix) -> tuple[Matrix, Matrix, list[int]]:
+    if np is None or cuda is None:
+        raise RuntimeError("CUDA indisponivel: instale numpy e numba com suporte a cuda.")
+
+    _registrar_dlls_cuda_no_windows()
+    _precarregar_cudart()
+
+    try:
+        gpu_disponivel = cuda.is_available()
+    except Exception as exc:
+        raise RuntimeError(f"CUDA indisponivel: falha ao inicializar o runtime CUDA ({exc}).") from exc
+
+    if not gpu_disponivel:
+        try:
+            dispositivos = list(cuda.gpus)
+        except Exception:
+            dispositivos = []
+
+        if dispositivos:
+            raise RuntimeError(
+                "CUDA indisponivel: GPU detectada, mas o runtime CUDA nao foi encontrado. "
+                "Verifique a instalacao do CUDA Toolkit e se o arquivo cudart.dll esta no PATH."
+            )
+        raise RuntimeError("CUDA indisponivel: nenhuma GPU compativel foi detectada.")
+
+    a = np.array(matriz, dtype=np.float64)
+    n = a.shape[0]
+    permutacoes = list(range(n))
+    d_a = cuda.to_device(a)
+    threads_per_block = 128
+
+    for k in range(n - 1):
+        a_host = d_a.copy_to_host()
+        piv = k + int(np.argmax(np.abs(a_host[k:, k])))
+        if abs(a_host[piv, k]) < 1e-12:
+            raise ValueError("Nao foi possivel encontrar pivo valido.")
+
+        if piv != k:
+            a_host[[k, piv]] = a_host[[piv, k]]
+            permutacoes[k], permutacoes[piv] = permutacoes[piv], permutacoes[k]
+            d_a = cuda.to_device(a_host)
+
+        linha_pivo = cuda.to_device(a_host[k].copy())
+        linhas_abaixo = n - (k + 1)
+        if linhas_abaixo <= 0:
+            continue
+
+        blocks_per_grid = math.ceil(linhas_abaixo / threads_per_block)
+        _kernel_eliminacao_lu[blocks_per_grid, threads_per_block](d_a, linha_pivo, k, n)
+        cuda.synchronize()
+
+    fatores = d_a.copy_to_host().tolist()
+    return *_extrair_lu(fatores), permutacoes
+
+
+def lu_gpu_cuda(matriz: Matrix, vetor: Vector) -> Vector:
+    l, u, permutacoes = decomposicao_lu_gpu_cuda(matriz)
+    b_permutado = _aplicar_permutacao(vetor, permutacoes)
+    y = _substituicao_direta(l, b_permutado)
+    return _retrossubstituicao(u, y)
 
 
 def gerar_sistema_linear(tamanho: int, semente: int = 42) -> tuple[Matrix, Vector, Vector]:
@@ -380,6 +596,15 @@ def benchmark_solvers(
             esperado,
         ),
         _medir("Gauss paralelo GPU (CUDA)", gauss_gpu_cuda, matriz, vetor, esperado),
+        _medir("LU serie", lu_serial, matriz, vetor, esperado),
+        _medir(
+            "LU paralelo CPU",
+            lambda a, b: lu_parallel_cpu(a, b, max_workers=max_workers),
+            matriz,
+            vetor,
+            esperado,
+        ),
+        _medir("LU paralelo GPU (CUDA)", lu_gpu_cuda, matriz, vetor, esperado),
     ]
 
     return resultados

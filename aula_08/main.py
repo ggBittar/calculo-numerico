@@ -6,7 +6,7 @@ from tools.linear_systems import benchmark_solvers
 def imprimir_resultados(tamanho: int = 120, max_workers: int | None = None) -> None:
     resultados = benchmark_solvers(tamanho=tamanho, max_workers=max_workers)
 
-    print(f"Benchmark do metodo de Gauss para sistema {tamanho}x{tamanho}")
+    print(f"Benchmark de Gauss e LU para sistema {tamanho}x{tamanho}")
     print("-" * 78)
     print(f"{'Metodo':28} {'Tempo (s)':>12} {'Residuo':>16} {'Erro':>16}  Observacao")
     print("-" * 78)
@@ -20,7 +20,7 @@ def imprimir_resultados(tamanho: int = 120, max_workers: int | None = None) -> N
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Benchmark do metodo de Gauss.")
+    parser = argparse.ArgumentParser(description="Benchmark dos metodos de Gauss e LU.")
     parser.add_argument(
         "--tamanho",
         type=int,
