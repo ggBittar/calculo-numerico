@@ -33,7 +33,7 @@ from avaliacao02.time_methods import ALL_METHOD_NAMES
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Simulações da Avaliação 02 com CUDA/CuPy quando disponível.")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--cuda", action="store_true", help="Tenta usar CUDA via CuPy.")
+    group.add_argument("--cuda", action="store_true", help="Exige CUDA via CuPy.")
     group.add_argument("--cpu", action="store_true", help="Força NumPy/CPU.")
     parser.add_argument("--C", type=float, default=None, help="Coeficiente C para a questão 1. Padrão: config.default_C.")
     parser.add_argument("--save-every", type=float, default=60.0, help="Intervalo de amostragem do histórico [s].")
@@ -104,7 +104,7 @@ def build_tasks(C_default: float) -> list[SimulationTask]:
 def main() -> None:
     args = parse_args()
     prefer_cuda = not args.cpu
-    xp, using_cuda = get_array_module(prefer_cuda=prefer_cuda)
+    xp, using_cuda = get_array_module(prefer_cuda=prefer_cuda, require_cuda=args.cuda)
 
     cfg = SimulationConfig(save_every_seconds=args.save_every)
     C_default = cfg.default_C if args.C is None else args.C
@@ -134,6 +134,7 @@ def main() -> None:
         result.save_csv(dados_dir)
         all_frames.append(result.to_dataframe())
 
+    failures_path = dados_dir / "falhas_execucao.csv"
     if batch.failures:
         failures_df = pd.DataFrame(
             [
@@ -149,9 +150,10 @@ def main() -> None:
                 for failure in batch.failures
             ]
         )
-        failures_path = dados_dir / "falhas_execucao.csv"
         failures_df.to_csv(failures_path, index=False)
         print(f"Falhas registradas em: {failures_path}")
+    elif failures_path.exists():
+        failures_path.unlink()
 
     if not all_frames:
         raise RuntimeError("Nenhuma simulação terminou com sucesso; verifique falhas_execucao.csv.")

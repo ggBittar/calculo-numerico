@@ -27,10 +27,10 @@ def main() -> None:
     parser.add_argument("--N", type=int, default=20, help="Usa Nx=Ny=N.")
     parser.add_argument("--C", type=float, default=None, help="Coeficiente C de estabilidade.")
     parser.add_argument("--cpu", action="store_true", help="Força CPU/NumPy.")
-    parser.add_argument("--cuda", action="store_true", help="Tenta usar CUDA/CuPy.")
+    parser.add_argument("--cuda", action="store_true", help="Exige CUDA/CuPy.")
     args = parser.parse_args()
 
-    xp, using_cuda = get_array_module(prefer_cuda=not args.cpu)
+    xp, using_cuda = get_array_module(prefer_cuda=not args.cpu, require_cuda=args.cuda)
     cfg = SimulationConfig(save_every_seconds=60.0)
     requested_c = max_stable_c(args.method) if args.C is None else args.C
     used_c, limited = limit_c(args.method, requested_c)

@@ -12,7 +12,9 @@ O código resolve a condução térmica bidimensional transiente em uma chapa, u
 6. Adams-Bashforth de 2ª ordem
 7. Adams-Bashforth de 4ª ordem
 
-O projeto tenta usar **CUDA via CuPy** automaticamente. Se CuPy/CUDA não estiver disponível, usa NumPy na CPU para permitir depuração.
+O projeto tenta usar **CUDA via CuPy** automaticamente. Se CuPy/CUDA não estiver
+disponível, usa NumPy na CPU para permitir depuração. Quando `--cuda` é passado
+explicitamente, CUDA é obrigatório e o script falha se a GPU não estiver pronta.
 
 ## Estrutura
 
@@ -55,6 +57,15 @@ ou, para CUDA 11:
 
 ```bash
 pip install cupy-cuda11x
+```
+
+Ao usar `--cuda`, o projeto exige uma GPU funcional: ele chama
+`nvidia-modprobe`, testa o CuPy em um subprocesso e faz uma pequena alocação na
+GPU antes de iniciar as simulações. O timeout padrão desse teste é 10 segundos.
+Para dar mais tempo à inicialização da GPU:
+
+```bash
+AVALIACAO02_CUDA_PROBE_TIMEOUT=30 python scripts/run_all.py --cuda
 ```
 
 ## Como executar tudo

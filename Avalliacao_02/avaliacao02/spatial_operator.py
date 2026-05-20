@@ -15,6 +15,7 @@ As condições de convecção/radiação são incorporadas por pontos fantasmas
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import Any
 
 from .config import SimulationConfig
@@ -84,7 +85,14 @@ def rhs_temperature(T, Nx: int, Ny: int, xp: Any, cfg: SimulationConfig):
     # Pontos internos em x. Incluímos y=0 e y=Ny-1 em blocos específicos abaixo.
     i = slice(1, Nx - 1)
 
-    with xp.errstate(over="ignore", invalid="ignore"):
+    errstate = getattr(xp, "errstate", None)
+    floating_point_context = (
+        errstate(over="ignore", invalid="ignore")
+        if errstate is not None
+        else nullcontext()
+    )
+
+    with floating_point_context:
         # Região estritamente interna: 1 <= y <= Ny-2.
         j = slice(1, Ny - 1)
         d2Tdx2 = (T[2:Nx, j] - 2.0 * T[1:Nx - 1, j] + T[0:Nx - 2, j]) / dx**2
