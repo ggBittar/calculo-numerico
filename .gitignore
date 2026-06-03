@@ -1,7 +1,6 @@
 __pycache__
 .venv
 *.png
-*.pdf
 *.aux
 *.log
 *.out
