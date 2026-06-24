@@ -1,0 +1,10 @@
+Conducao termica 2D implicita
+C=0.25; dt=31.578947 s; rx=0.249474; ry=0.249474; iteracoes medias GS=7.03; iteracoes maximas GS=16
+C=0.5; dt=63.157895 s; rx=0.498947; ry=0.498947; iteracoes medias GS=10.92; iteracoes maximas GS=24
+C=1; dt=126.31579 s; rx=0.997895; ry=0.997895; iteracoes medias GS=18.08; iteracoes maximas GS=39
+C=2; dt=252.63158 s; rx=1.99579; ry=1.99579; iteracoes medias GS=30.82; iteracoes maximas GS=61
+
+Equacao da onda 1D
+euler_explicito; dt=0.004 s; erro L2 final=1.28502650e+35
+rk4; dt=0.004 s; erro L2 final=2.34964664e-10
+euler_implicito; dt=0.004 s; erro L2 final=2.72315815e-04

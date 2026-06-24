@@ -1,0 +1,396 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[brazilian]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\geometry{margin=2.5cm}
+\hypersetup{colorlinks=true, linkcolor=black, urlcolor=blue}
+\graphicspath{{resultados/figuras/}}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny,
+    keywordstyle=\color{blue!70!black},
+    commentstyle=\color{green!40!black}
+}
+
+\title{Terceira Avaliacao de Metodos Numericos}
+\author{Gustavo Bittar}
+\date{24 de junho de 2026}
+
+\begin{document}
+\maketitle
+
+\section{Conducao termica bidimensional transiente}
+
+O problema fisico corresponde a conducao de calor em uma placa bidimensional com propriedades constantes e sem geracao interna. A equacao governante e
+\begin{equation}
+    \rho c_p \frac{\partial T}{\partial t}
+    =
+    k\left(
+        \frac{\partial^2 T}{\partial x^2}
+        +
+        \frac{\partial^2 T}{\partial y^2}
+    \right),
+    \qquad
+    0<x<L_x,\quad 0<y<L_y,\quad t>0.
+\end{equation}
+Equivalentemente,
+\begin{equation}
+    \frac{\partial T}{\partial t}
+    =
+    \alpha\left(
+        \frac{\partial^2 T}{\partial x^2}
+        +
+        \frac{\partial^2 T}{\partial y^2}
+    \right),
+    \qquad
+    \alpha=\frac{k}{\rho c_p}.
+\end{equation}
+
+As condicoes de contorno gerais sao de Dirichlet:
+\begin{align}
+    T(0,y,t)&=T_E, & T(L_x,y,t)&=T_D,\\
+    T(x,0,t)&=T_S, & T(x,L_y,t)&=T_N,
+\end{align}
+e a condicao inicial usada no dominio interno e
+\begin{equation}
+    T(x,y,0)=300\ \mathrm{K}.
+\end{equation}
+
+Para a simulacao numerica foram usadas as propriedades do aluminio puro
+\[
+    k=237\ \mathrm{W/(m\,K)},\qquad
+    \rho=2700\ \mathrm{kg/m^3},\qquad
+    c_p=900\ \mathrm{J/(kg\,K)},
+\]
+logo
+\[
+    \alpha=9{,}7531\times 10^{-5}\ \mathrm{m^2/s}.
+\]
+A placa possui $L_x=L_y=1{,}0\ \mathrm{m}$ e espessura de $5{,}0\ \mathrm{mm}$. Como nao ha termo fonte nem perda superficial, a espessura nao aparece explicitamente na equacao bidimensional resolvida.
+
+\subsection{Discretizacao implicita}
+
+Aplicando diferencas finitas centrais de segunda ordem no espaco e avanco temporal implicito, tem-se
+\begin{equation}
+    \frac{T_{i,j}^{n+1}-T_{i,j}^{n}}{\Delta t}
+    =
+    \alpha
+    \left[
+        \frac{T_{i+1,j}^{n+1}-2T_{i,j}^{n+1}+T_{i-1,j}^{n+1}}{\Delta x^2}
+        +
+        \frac{T_{i,j+1}^{n+1}-2T_{i,j}^{n+1}+T_{i,j-1}^{n+1}}{\Delta y^2}
+    \right].
+\end{equation}
+Definindo
+\[
+    r_x=\frac{\alpha\Delta t}{\Delta x^2},
+    \qquad
+    r_y=\frac{\alpha\Delta t}{\Delta y^2},
+\]
+obtem-se, para cada ponto interno,
+\begin{equation}
+    (1+2r_x+2r_y)T_{i,j}^{n+1}
+    -r_x(T_{i+1,j}^{n+1}+T_{i-1,j}^{n+1})
+    -r_y(T_{i,j+1}^{n+1}+T_{i,j-1}^{n+1})
+    =
+    T_{i,j}^{n}.
+\end{equation}
+O passo de tempo foi calculado por
+\begin{equation}
+    \Delta t=C\frac{\min(\Delta x,\Delta y)^2}{\alpha}.
+\end{equation}
+
+\subsection{Gauss-Seidel}
+
+Isolando $T_{i,j}^{n+1}$, a iteracao de Gauss-Seidel fica
+\begin{equation}
+    T_{i,j}^{(m+1)}
+    =
+    \frac{
+        T_{i,j}^{n}
+        +r_x\left(T_{i-1,j}^{(m+1)}+T_{i+1,j}^{(m)}\right)
+        +r_y\left(T_{i,j-1}^{(m+1)}+T_{i,j+1}^{(m)}\right)
+    }{1+2r_x+2r_y}.
+\end{equation}
+No programa foi usada a forma Gauss-Seidel vermelho-preto vetorizada, que preserva a dependencia atualizada entre vizinhos e reduz o custo computacional em Python.
+
+\begin{enumerate}
+    \item Inicializar $T^0$ com 300 K no interior e impor as temperaturas prescritas no contorno.
+    \item Para cada passo de tempo, montar $r_x$ e $r_y$.
+    \item Repetir Gauss-Seidel ate que $\max|T^{(m+1)}-T^{(m)}|<10^{-8}$.
+    \item Atualizar o campo temporal e salvar os instantes pedidos.
+\end{enumerate}
+
+\begin{table}[H]
+\centering
+\caption{Parametros efetivos da simulacao com $N_x=N_y=10$.}
+\begin{tabular}{ccccc}
+\toprule
+$C$ & $\Delta t$ (s) & $r_x$ & $r_y$ & iteracoes medias GS \\
+\midrule
+0,25 & 31,578947 & 0,249474 & 0,249474 & 7,03 \\
+0,50 & 63,157895 & 0,498947 & 0,498947 & 10,92 \\
+1,00 & 126,315790 & 0,997895 & 0,997895 & 18,08 \\
+2,00 & 252,631580 & 1,995790 & 1,995790 & 30,82 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Campos de temperatura}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{calor_campos_C0.25.png}
+\caption{Campos de temperatura para $C=0{,}25$.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{calor_campos_C0.5.png}
+\caption{Campos de temperatura para $C=0{,}50$.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{calor_campos_C1.png}
+\caption{Campos de temperatura para $C=1{,}0$.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{calor_campos_C2.png}
+\caption{Campos de temperatura para $C=2{,}0$.}
+\end{figure}
+
+\subsection{Perfis em $t=4$ h}
+
+Para os perfis de malha foi usado $C=1{,}0$, mantendo o metodo implicito e comparando $N_x=N_y=10$, $20$ e $40$.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{calor_perfil_x_meio.png}
+\caption{Perfil em $x=L_x/2$.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{calor_perfil_x_quarto.png}
+\caption{Perfil em $x=L_x/4$.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{calor_perfil_y_meio.png}
+\caption{Perfil em $y=L_y/2$.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{calor_perfil_y_3quartos.png}
+\caption{Perfil em $y=3L_y/4$.}
+\end{figure}
+
+\subsection{Evolucao temporal}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{calor_evolucao_centro.png}
+\caption{Evolucao temporal da temperatura em $x=L_x/2$ e $y=L_y/2$.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{calor_evolucao_quarto.png}
+\caption{Evolucao temporal da temperatura em $x=L_x/4$ e $y=L_y/4$.}
+\end{figure}
+
+\section{Equacao da onda unidimensional}
+
+A equacao da onda e
+\begin{equation}
+    \frac{\partial^2 y}{\partial t^2}
+    =
+    c^2\frac{\partial^2 y}{\partial x^2},
+    \qquad 0\le x\le L,\quad 0\le t\le 2\ \mathrm{s}.
+\end{equation}
+Foram usados $L=1\ \mathrm{m}$, $c=1\ \mathrm{m/s}$ e $A=0{,}01\ \mathrm{m}$, com
+\begin{equation}
+    y(0,t)=y(L,t)=0,
+    \qquad
+    y(x,0)=A\sin\left(\frac{\pi x}{L}\right),
+    \qquad
+    v(x,0)=\frac{\partial y}{\partial t}(x,0)=0.
+\end{equation}
+
+Definindo $v=\partial y/\partial t$, o sistema de primeira ordem e
+\begin{equation}
+    \frac{\partial y}{\partial t}=v,
+    \qquad
+    \frac{\partial v}{\partial t}=c^2\frac{\partial^2 y}{\partial x^2}.
+\end{equation}
+No espaco,
+\begin{equation}
+    \frac{d y_i}{dt}=v_i,
+    \qquad
+    \frac{d v_i}{dt}=c^2\frac{y_{i+1}-2y_i+y_{i-1}}{\Delta x^2}.
+\end{equation}
+
+\subsection{Euler explicito}
+
+\begin{align}
+    y_i^{n+1} &= y_i^n+\Delta t\,v_i^n,\\
+    v_i^{n+1} &= v_i^n+\Delta t\,c^2
+    \frac{y_{i+1}^n-2y_i^n+y_{i-1}^n}{\Delta x^2}.
+\end{align}
+Este metodo, aplicado diretamente ao sistema de primeira ordem da onda, e instavel para o oscilador sem amortecimento. Por isso os resultados de erro crescem rapidamente.
+
+\subsection{Runge-Kutta explicito de quarta ordem}
+
+Se $\mathbf{u}=[\mathbf{y},\mathbf{v}]^T$ e $\mathbf{u}'=F(\mathbf{u})$, entao
+\begin{align}
+    \mathbf{k}_1 &= F(\mathbf{u}^n),\\
+    \mathbf{k}_2 &= F(\mathbf{u}^n+\tfrac{\Delta t}{2}\mathbf{k}_1),\\
+    \mathbf{k}_3 &= F(\mathbf{u}^n+\tfrac{\Delta t}{2}\mathbf{k}_2),\\
+    \mathbf{k}_4 &= F(\mathbf{u}^n+\Delta t\mathbf{k}_3),\\
+    \mathbf{u}^{n+1} &= \mathbf{u}^n+\frac{\Delta t}{6}
+    (\mathbf{k}_1+2\mathbf{k}_2+2\mathbf{k}_3+\mathbf{k}_4).
+\end{align}
+
+\subsection{Euler implicito}
+
+Com $\mathbf{D}_{xx}$ representando a matriz de segunda derivada nos pontos internos,
+\begin{align}
+    \mathbf{y}^{n+1}-\Delta t\,\mathbf{v}^{n+1}&=\mathbf{y}^n,\\
+    -\Delta t\,c^2\mathbf{D}_{xx}\mathbf{y}^{n+1}+\mathbf{v}^{n+1}&=\mathbf{v}^n.
+\end{align}
+Logo, o sistema linear resolvido a cada passo e
+\begin{equation}
+    \begin{bmatrix}
+        \mathbf{I} & -\Delta t\,\mathbf{I}\\
+        -\Delta t\,c^2\mathbf{D}_{xx} & \mathbf{I}
+    \end{bmatrix}
+    \begin{bmatrix}
+        \mathbf{y}^{n+1}\\
+        \mathbf{v}^{n+1}
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+        \mathbf{y}^{n}\\
+        \mathbf{v}^{n}
+    \end{bmatrix}.
+\end{equation}
+A matriz $\mathbf{D}_{xx}$ e tridiagonal:
+\begin{equation}
+    \mathbf{D}_{xx}
+    =
+    \frac{1}{\Delta x^2}
+    \begin{bmatrix}
+        -2 & 1 & 0 & \cdots & 0\\
+        1 & -2 & 1 & \cdots & 0\\
+        0 & 1 & -2 & \cdots & 0\\
+        \vdots & \vdots & \vdots & \ddots & 1\\
+        0 & 0 & 0 & 1 & -2
+    \end{bmatrix}.
+\end{equation}
+
+\subsection{Resultados da onda}
+
+As simulacoes usaram $N_x=101$ e $\Delta t=0{,}004$ s.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{onda_deslocamento_euler_explicito.png}
+\caption{Deslocamento $y(x,t)$ por Euler explicito.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{onda_deslocamento_rk4.png}
+\caption{Deslocamento $y(x,t)$ por Runge-Kutta de quarta ordem.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{onda_deslocamento_euler_implicito.png}
+\caption{Deslocamento $y(x,t)$ por Euler implicito.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{onda_comparacao_t2.png}
+\caption{Comparacao dos metodos em $t=2$ s.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{onda_evolucao_y_centro.png}
+\caption{Evolucao temporal de $y(L/2,t)$.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{onda_evolucao_v_centro.png}
+\caption{Evolucao temporal de $v(L/2,t)$.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\textwidth]{onda_erro_l2.png}
+\caption{Evolucao temporal do erro $L_2$.}
+\end{figure}
+
+\section{Programa computacional}
+
+O codigo completo esta no arquivo \texttt{main.py}. Ele executa todas as simulacoes e grava automaticamente as figuras usadas neste relatorio. O trecho abaixo mostra a chamada principal.
+
+\begin{lstlisting}[language=Python]
+def run_all() -> None:
+    ensure_dirs()
+    heat_cfg = HeatConfig()
+    heat_times = [0.0, 1800.0, 3600.0, 7200.0, 10800.0, 14400.0]
+    heat_c_results = {}
+    for c_value in [0.25, 0.50, 1.0, 2.0]:
+        result = simulate_heat(10, 10, c_value, heat_times, heat_cfg)
+        heat_c_results[c_value] = result
+        plot_heat_snapshots(result, c_value)
+
+    heat_mesh_results = {}
+    for n in [10, 20, 40]:
+        heat_mesh_results[n] = simulate_heat(n, n, 1.0, [0.0, 14400.0], heat_cfg)
+    plot_heat_mesh_profiles(heat_mesh_results, heat_cfg)
+    plot_heat_temporal(heat_mesh_results)
+
+    wave_cfg = WaveConfig()
+    wave_results = {
+        "euler_explicito": simulate_wave("euler_explicito", wave_cfg),
+        "rk4": simulate_wave("rk4", wave_cfg),
+        "euler_implicito": simulate_wave("euler_implicito", wave_cfg),
+    }
+    plot_wave_results(wave_results, wave_cfg)
+    save_summary(heat_c_results, wave_results)
+\end{lstlisting}
+
+\section{Conclusoes}
+
+O metodo implicito para conducao termica produziu campos suaves e convergentes para todos os coeficientes $C$ testados. O aumento de $C$ elevou o numero medio de iteracoes de Gauss-Seidel por passo, como esperado, pois o acoplamento espacial do sistema linear se torna mais forte.
+
+Na equacao da onda, o metodo RK4 acompanhou muito bem a solucao analitica no intervalo simulado. O Euler implicito permaneceu estavel, mas introduziu amortecimento numerico. O Euler explicito aplicado diretamente ao sistema de primeira ordem apresentou crescimento instavel, refletido no erro $L_2$.
+
+\section{Referencia}
+
+INCROPERA, F. P.; DEWITT, D. P.; BERGMAN, T. L.; LAVINE, A. S. \textit{Fundamentos de transferencia de calor e de massa}. LTC.
+
+\end{document}
