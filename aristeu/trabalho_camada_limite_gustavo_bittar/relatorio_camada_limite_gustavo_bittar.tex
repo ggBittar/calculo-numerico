@@ -1,0 +1,292 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{indentfirst}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\geometry{margin=2.5cm}
+
+\lstdefinestyle{pythonstyle}{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{teal},
+    numbers=left,
+    numberstyle=\tiny,
+    breaklines=true,
+    frame=single,
+    tabsize=4
+}
+
+\title{Trabalho de Camada Limite -- 1/2026\\
+Camada limite laminar sobre placa plana}
+\author{Gustavo Bittar Gonçalves}
+\date{Entrega: 10/07/2026}
+
+\begin{document}
+
+\maketitle
+
+\section{Introdução}
+
+Este relatório apresenta a modelagem física e matemática da camada limite laminar formada sobre uma placa plana, considerando fluido newtoniano, escoamento permanente, incompressível e velocidade uniforme $U$ na entrada. A partir das equações diferenciais parciais de Navier--Stokes, é feita uma análise de ordem de grandeza para obter as equações simplificadas de camada limite. Em seguida, utiliza-se a transformação de similaridade de Blasius para reduzir o problema a uma equação diferencial ordinária, que é resolvida numericamente pelo método de Runge--Kutta de quarta ordem combinado com o método de shooting.
+
+\section{Modelo físico}
+
+Considera-se uma placa plana semi-infinita alinhada com o escoamento externo uniforme. O fluido escoa na direção $x$ com velocidade $U$ longe da parede, enquanto $y$ representa a direção normal à placa. A placa é fixa, lisa e impermeável. O fluido é newtoniano, incompressível e possui viscosidade cinemática constante $\nu$.
+
+As hipóteses físicas adotadas são:
+
+\begin{itemize}
+    \item escoamento bidimensional;
+    \item regime permanente;
+    \item fluido incompressível;
+    \item propriedades constantes;
+    \item ausência de gradiente de pressão externo, isto é, $\frac{dp}{dx}=0$;
+    \item condição de não deslizamento na parede;
+    \item velocidade externa uniforme $U$.
+\end{itemize}
+
+As condições de contorno físicas são:
+
+\begin{align}
+    u(x,0) &= 0, & v(x,0) &= 0, \\
+    u(x,y\rightarrow\infty) &= U.
+\end{align}
+
+\section{Modelo matemático diferencial simplificado}
+
+Para um escoamento incompressível, bidimensional e permanente, as equações de conservação são dadas por:
+
+\begin{equation}
+    \frac{\partial u}{\partial x} + \frac{\partial v}{\partial y} = 0,
+\end{equation}
+
+\begin{equation}
+    u\frac{\partial u}{\partial x} + v\frac{\partial u}{\partial y}
+    = -\frac{1}{\rho}\frac{\partial p}{\partial x}
+    + \nu\left(\frac{\partial^2 u}{\partial x^2}+\frac{\partial^2 u}{\partial y^2}\right),
+\end{equation}
+
+\begin{equation}
+    u\frac{\partial v}{\partial x} + v\frac{\partial v}{\partial y}
+    = -\frac{1}{\rho}\frac{\partial p}{\partial y}
+    + \nu\left(\frac{\partial^2 v}{\partial x^2}+\frac{\partial^2 v}{\partial y^2}\right).
+\end{equation}
+
+Na camada limite, seja $L$ uma escala longitudinal e $\delta$ a espessura da camada limite. Para $\delta \ll L$, tem-se:
+
+\begin{equation}
+    u \sim U, \qquad x \sim L, \qquad y \sim \delta.
+\end{equation}
+
+Da continuidade:
+
+\begin{equation}
+    \frac{U}{L} \sim \frac{V}{\delta}
+    \quad \Rightarrow \quad
+    V \sim U\frac{\delta}{L}.
+\end{equation}
+
+Na equação de quantidade de movimento em $x$:
+
+\begin{align}
+    u\frac{\partial u}{\partial x} &\sim \frac{U^2}{L}, \\
+    v\frac{\partial u}{\partial y} &\sim \left(U\frac{\delta}{L}\right)\frac{U}{\delta}=\frac{U^2}{L}, \\
+    \nu\frac{\partial^2 u}{\partial x^2} &\sim \nu\frac{U}{L^2}, \\
+    \nu\frac{\partial^2 u}{\partial y^2} &\sim \nu\frac{U}{\delta^2}.
+\end{align}
+
+Como $\delta \ll L$, o termo difusivo na direção $x$ é pequeno em relação ao termo difusivo na direção $y$:
+
+\begin{equation}
+    \nu\frac{U}{L^2} \ll \nu\frac{U}{\delta^2}.
+\end{equation}
+
+Equilibrando inércia e difusão viscosa normal:
+
+\begin{equation}
+    \frac{U^2}{L} \sim \nu\frac{U}{\delta^2}
+    \quad \Rightarrow \quad
+    \frac{\delta}{L} \sim \frac{1}{\sqrt{Re_L}},
+\end{equation}
+
+onde:
+
+\begin{equation}
+    Re_L = \frac{UL}{\nu}.
+\end{equation}
+
+Assim, para $Re_L$ elevado, a camada limite é fina. O modelo diferencial simplificado fica:
+
+\begin{equation}
+    \boxed{\frac{\partial u}{\partial x} + \frac{\partial v}{\partial y} = 0}
+\end{equation}
+
+\begin{equation}
+    \boxed{u\frac{\partial u}{\partial x} + v\frac{\partial u}{\partial y}
+    = \nu\frac{\partial^2 u}{\partial y^2}}
+\end{equation}
+
+com as condições:
+
+\begin{align}
+    u(x,0)&=0, & v(x,0)&=0, & u(x,\infty)&=U.
+\end{align}
+
+\section{Teoria de similaridade}
+
+Para reduzir as equações diferenciais parciais a uma equação diferencial ordinária, introduz-se a função corrente $\psi$:
+
+\begin{equation}
+    u = \frac{\partial \psi}{\partial y}, \qquad
+    v = -\frac{\partial \psi}{\partial x}.
+\end{equation}
+
+Define-se a variável de similaridade de Blasius:
+
+\begin{equation}
+    \eta = y\sqrt{\frac{U}{\nu x}},
+\end{equation}
+
+com a função corrente escrita como:
+
+\begin{equation}
+    \psi = \sqrt{\nu U x}\,f(\eta).
+\end{equation}
+
+A partir dessas definições:
+
+\begin{equation}
+    u = U f'(\eta),
+\end{equation}
+
+\begin{equation}
+    v = \frac{1}{2}\sqrt{\frac{\nu U}{x}}\left[\eta f'(\eta)-f(\eta)\right].
+\end{equation}
+
+Substituindo essas expressões na equação de camada limite em $x$, obtém-se a equação de Blasius:
+
+\begin{equation}
+    \boxed{f''' + \frac{1}{2}f f'' = 0.}
+\end{equation}
+
+As condições de contorno tornam-se:
+
+\begin{align}
+    f(0) &= 0, \\
+    f'(0) &= 0, \\
+    f'(\infty) &= 1.
+\end{align}
+
+\section{Sistema equivalente de EDOs de primeira ordem}
+
+Define-se:
+
+\begin{align}
+    y_1 &= f, \\
+    y_2 &= f', \\
+    y_3 &= f''.
+\end{align}
+
+Logo:
+
+\begin{align}
+    y_1' &= y_2, \\
+    y_2' &= y_3, \\
+    y_3' &= -\frac{1}{2}y_1y_3.
+\end{align}
+
+As condições iniciais são:
+
+\begin{align}
+    y_1(0) &= 0, \\
+    y_2(0) &= 0, \\
+    y_3(0) &= \alpha,
+\end{align}
+
+em que $\alpha=f''(0)$ é desconhecido. O valor de $\alpha$ é determinado pelo método de shooting para satisfazer $y_2(\eta_{max})\approx 1$.
+
+\section{Solução numérica por Runge--Kutta}
+
+A integração foi feita pelo método de Runge--Kutta clássico de quarta ordem. Como a condição $f'(\infty)=1$ está no infinito, adotou-se $\eta_{max}=10$, valor suficiente para representar o comportamento assintótico da solução. O parâmetro $\alpha=f''(0)$ foi ajustado pelo método da secante.
+
+O valor numérico obtido foi:
+
+\begin{equation}
+    \boxed{f''(0) \approx 0{,}3320573372.}
+\end{equation}
+
+Esse valor caracteriza o gradiente de velocidade na parede para a solução de Blasius.
+
+\section{Distribuição de velocidade}
+
+A distribuição de velocidade adimensional é dada por:
+
+\begin{equation}
+    \frac{u}{U}=f'(\eta).
+\end{equation}
+
+A Figura~\ref{fig:perfil_adimensional} mostra o perfil de velocidade na direção normal à placa, em coordenadas adimensionais.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.78\textwidth]{perfil_velocidade_adimensional.png}
+    \caption{Perfil adimensional de velocidade para a camada limite de Blasius.}
+    \label{fig:perfil_adimensional}
+\end{figure}
+
+Também foi gerado um exemplo dimensional usando $x=1$ m, $U=1$ m/s e $\nu=10^{-6}$ m$^2$/s. Nesse caso:
+
+\begin{equation}
+    y = \eta\sqrt{\frac{\nu x}{U}}.
+\end{equation}
+
+A estimativa usual para a espessura da camada limite é:
+
+\begin{equation}
+    \delta_{99} \approx 5\sqrt{\frac{\nu x}{U}}.
+\end{equation}
+
+Para os valores adotados no exemplo:
+
+\begin{equation}
+    \delta_{99} \approx 5{,}0\times 10^{-3}\,\text{m}.
+\end{equation}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.78\textwidth]{perfil_velocidade_dimensional.png}
+    \caption{Exemplo de perfil dimensional de velocidade para $x=1$ m, $U=1$ m/s e $\nu=10^{-6}$ m$^2$/s.}
+    \label{fig:perfil_dimensional}
+\end{figure}
+
+\section{Código em Python}
+
+O programa em Python resolve a equação de Blasius pelo método de shooting com Runge--Kutta de quarta ordem. O código principal está no arquivo \texttt{camada\_limite\_blasius.py}. O trecho essencial do sistema resolvido é:
+
+\begin{lstlisting}[style=pythonstyle]
+def rhs(_eta, state):
+    y1, y2, y3 = state
+    return (y2, y3, -0.5 * y1 * y3)
+\end{lstlisting}
+
+O método de shooting ajusta o valor inicial desconhecido $f''(0)$ até que $f'(\eta_{max})=1$.
+
+\section{Conclusão}
+
+A partir das equações de Navier--Stokes, a análise de ordem de grandeza mostrou que, para número de Reynolds elevado, os termos viscosos longitudinais são desprezíveis em comparação com os termos viscosos normais à placa. Com isso, obteve-se o modelo simplificado de camada limite de Prandtl.
+
+A transformação de similaridade de Blasius reduziu o problema de EDPs para uma EDO não linear de terceira ordem. Essa EDO foi transformada em um sistema de três EDOs de primeira ordem e resolvida numericamente por Runge--Kutta de quarta ordem. O resultado obtido, $f''(0)\approx 0{,}3320573372$, é compatível com a solução clássica de Blasius. O perfil de velocidade mostra a transição suave entre a condição de não deslizamento na parede e a velocidade uniforme do escoamento externo.
+
+\end{document}

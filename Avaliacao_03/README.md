@@ -1,14 +1,22 @@
-# Avaliacao 03 - Metodos Numericos
+# Avaliação 03 - Métodos Numéricos
 
-Este projeto resolve a terceira avaliacao de Metodos Numericos.
+Este projeto resolve a terceira avaliação de Métodos Numéricos.
 
 O arquivo `main.py` gera:
 
-- simulacoes da conducao termica bidimensional transiente pelo metodo implicito;
-- solucao do sistema linear da conducao por Gauss-Seidel;
-- simulacoes da equacao da onda 1D por Euler explicito, RK4 explicito e Euler implicito;
-- figuras e arquivos CSV em `resultados/`;
-- o relatorio em LaTeX `relatorio_avaliacao03.tex`.
+- simulações da condução térmica bidimensional transiente pelo método implícito;
+- solução do sistema linear da condução por Gauss-Seidel;
+- simulações da equação da onda 1D por Euler explícito, RK4 explícito e Euler implícito;
+- figuras e arquivos de resumo em `resultados/`;
+- o relatório em LaTeX `relatorio_avaliacao03.tex`.
+
+Também há três executores separados para a questão da onda:
+
+```bash
+python onda_euler_explicito.py
+python onda_rk4.py
+python onda_euler_implicito.py
+```
 
 ## Como executar
 
@@ -28,4 +36,4 @@ pdflatex -interaction=nonstopmode -halt-on-error relatorio_avaliacao03.tex
 pdflatex -interaction=nonstopmode -halt-on-error relatorio_avaliacao03.tex
 ```
 
-As figuras usadas pelo relatorio ficam em `resultados/figuras`.
+As figuras usadas pelo relatório ficam em `resultados/figuras`.

@@ -25,16 +25,16 @@
     commentstyle=\color{green!40!black}
 }
 
-\title{Terceira Avaliacao de Metodos Numericos}
-\author{Gustavo Bittar}
+\title{Terceira Avaliação de Métodos Numéricos}
+\author{Gustavo Bittar Gonçalves}
 \date{24 de junho de 2026}
 
 \begin{document}
 \maketitle
 
-\section{Conducao termica bidimensional transiente}
+\section{Condução térmica bidimensional transiente}
 
-O problema fisico corresponde a conducao de calor em uma placa bidimensional com propriedades constantes e sem geracao interna. A equacao governante e
+O problema físico corresponde à condução de calor em uma placa bidimensional com propriedades constantes e sem geração interna. O modelo diferencial é
 \begin{equation}
     \rho c_p \frac{\partial T}{\partial t}
     =
@@ -59,17 +59,25 @@ Equivalentemente,
     \alpha=\frac{k}{\rho c_p}.
 \end{equation}
 
-As condicoes de contorno gerais sao de Dirichlet:
+As condições de contorno gerais são de Dirichlet:
 \begin{align}
     T(0,y,t)&=T_E, & T(L_x,y,t)&=T_D,\\
     T(x,0,t)&=T_S, & T(x,L_y,t)&=T_N,
 \end{align}
-e a condicao inicial usada no dominio interno e
+e a condição inicial usada no domínio interno é
 \begin{equation}
     T(x,y,0)=300\ \mathrm{K}.
 \end{equation}
 
-Para a simulacao numerica foram usadas as propriedades do aluminio puro
+Para o caso numérico da avaliação:
+\begin{align}
+    T(0,y,t)&=400\ \mathrm{K},&
+    T(L_x,y,t)&=500\ \mathrm{K},\\
+    T(x,0,t)&=600\ \mathrm{K},&
+    T(x,L_y,t)&=200\ \mathrm{K}.
+\end{align}
+
+Foram usadas as propriedades do alumínio puro
 \[
     k=237\ \mathrm{W/(m\,K)},\qquad
     \rho=2700\ \mathrm{kg/m^3},\qquad
@@ -79,11 +87,11 @@ logo
 \[
     \alpha=9{,}7531\times 10^{-5}\ \mathrm{m^2/s}.
 \]
-A placa possui $L_x=L_y=1{,}0\ \mathrm{m}$ e espessura de $5{,}0\ \mathrm{mm}$. Como nao ha termo fonte nem perda superficial, a espessura nao aparece explicitamente na equacao bidimensional resolvida.
+A placa possui $L_x=L_y=1{,}0\ \mathrm{m}$ e espessura de $5{,}0\ \mathrm{mm}$. Como não há termo fonte nem perda superficial, a espessura não aparece explicitamente na equação bidimensional resolvida.
 
-\subsection{Discretizacao implicita}
+\subsection{Discretização implícita}
 
-Aplicando diferencas finitas centrais de segunda ordem no espaco e avanco temporal implicito, tem-se
+Aplicando diferenças finitas centrais de segunda ordem no espaço e avanço temporal implícito, tem-se
 \begin{equation}
     \frac{T_{i,j}^{n+1}-T_{i,j}^{n}}{\Delta t}
     =
@@ -100,7 +108,7 @@ Definindo
     \qquad
     r_y=\frac{\alpha\Delta t}{\Delta y^2},
 \]
-obtem-se, para cada ponto interno,
+obtém-se, para cada ponto interno,
 \begin{equation}
     (1+2r_x+2r_y)T_{i,j}^{n+1}
     -r_x(T_{i+1,j}^{n+1}+T_{i-1,j}^{n+1})
@@ -113,9 +121,9 @@ O passo de tempo foi calculado por
     \Delta t=C\frac{\min(\Delta x,\Delta y)^2}{\alpha}.
 \end{equation}
 
-\subsection{Gauss-Seidel}
+\subsection{Algoritmo de Gauss-Seidel}
 
-Isolando $T_{i,j}^{n+1}$, a iteracao de Gauss-Seidel fica
+Isolando $T_{i,j}^{n+1}$, a iteração de Gauss-Seidel fica
 \begin{equation}
     T_{i,j}^{(m+1)}
     =
@@ -125,21 +133,21 @@ Isolando $T_{i,j}^{n+1}$, a iteracao de Gauss-Seidel fica
         +r_y\left(T_{i,j-1}^{(m+1)}+T_{i,j+1}^{(m)}\right)
     }{1+2r_x+2r_y}.
 \end{equation}
-No programa foi usada a forma Gauss-Seidel vermelho-preto vetorizada, que preserva a dependencia atualizada entre vizinhos e reduz o custo computacional em Python.
+No programa foi usada a forma Gauss-Seidel vermelho-preto vetorizada, que preserva a dependência atualizada entre vizinhos e reduz o custo computacional em Python.
 
 \begin{enumerate}
     \item Inicializar $T^0$ com 300 K no interior e impor as temperaturas prescritas no contorno.
-    \item Para cada passo de tempo, montar $r_x$ e $r_y$.
-    \item Repetir Gauss-Seidel ate que $\max|T^{(m+1)}-T^{(m)}|<10^{-8}$.
+    \item Para cada passo de tempo, calcular $r_x$ e $r_y$.
+    \item Repetir Gauss-Seidel até que $\max|T^{(m+1)}-T^{(m)}|<10^{-8}$.
     \item Atualizar o campo temporal e salvar os instantes pedidos.
 \end{enumerate}
 
 \begin{table}[H]
 \centering
-\caption{Parametros efetivos da simulacao com $N_x=N_y=10$.}
+\caption{Parâmetros efetivos da simulação com $N_x=N_y=10$.}
 \begin{tabular}{ccccc}
 \toprule
-$C$ & $\Delta t$ (s) & $r_x$ & $r_y$ & iteracoes medias GS \\
+$C$ & $\Delta t$ (s) & $r_x$ & $r_y$ & iterações médias GS \\
 \midrule
 0,25 & 31,578947 & 0,249474 & 0,249474 & 7,03 \\
 0,50 & 63,157895 & 0,498947 & 0,498947 & 10,92 \\
@@ -177,7 +185,7 @@ $C$ & $\Delta t$ (s) & $r_x$ & $r_y$ & iteracoes medias GS \\
 
 \subsection{Perfis em $t=4$ h}
 
-Para os perfis de malha foi usado $C=1{,}0$, mantendo o metodo implicito e comparando $N_x=N_y=10$, $20$ e $40$.
+Para os perfis de malha foi usado $C=1{,}0$, mantendo o método implícito e comparando $N_x=N_y=10$, $20$ e $40$.
 
 \begin{figure}[H]
 \centering
@@ -203,23 +211,23 @@ Para os perfis de malha foi usado $C=1{,}0$, mantendo o metodo implicito e compa
 \caption{Perfil em $y=3L_y/4$.}
 \end{figure}
 
-\subsection{Evolucao temporal}
+\subsection{Evolução temporal}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.86\textwidth]{calor_evolucao_centro.png}
-\caption{Evolucao temporal da temperatura em $x=L_x/2$ e $y=L_y/2$.}
+\caption{Evolução temporal da temperatura em $x=L_x/2$ e $y=L_y/2$.}
 \end{figure}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.86\textwidth]{calor_evolucao_quarto.png}
-\caption{Evolucao temporal da temperatura em $x=L_x/4$ e $y=L_y/4$.}
+\caption{Evolução temporal da temperatura em $x=L_x/4$ e $y=L_y/4$.}
 \end{figure}
 
-\section{Equacao da onda unidimensional}
+\section{Equação da onda unidimensional}
 
-A equacao da onda e
+A equação da onda é
 \begin{equation}
     \frac{\partial^2 y}{\partial t^2}
     =
@@ -235,31 +243,31 @@ Foram usados $L=1\ \mathrm{m}$, $c=1\ \mathrm{m/s}$ e $A=0{,}01\ \mathrm{m}$, co
     v(x,0)=\frac{\partial y}{\partial t}(x,0)=0.
 \end{equation}
 
-Definindo $v=\partial y/\partial t$, o sistema de primeira ordem e
+Definindo $v=\partial y/\partial t$, o sistema de primeira ordem é
 \begin{equation}
     \frac{\partial y}{\partial t}=v,
     \qquad
     \frac{\partial v}{\partial t}=c^2\frac{\partial^2 y}{\partial x^2}.
 \end{equation}
-No espaco,
+No espaço,
 \begin{equation}
     \frac{d y_i}{dt}=v_i,
     \qquad
     \frac{d v_i}{dt}=c^2\frac{y_{i+1}-2y_i+y_{i-1}}{\Delta x^2}.
 \end{equation}
 
-\subsection{Euler explicito}
+\subsection{Euler explícito}
 
 \begin{align}
     y_i^{n+1} &= y_i^n+\Delta t\,v_i^n,\\
     v_i^{n+1} &= v_i^n+\Delta t\,c^2
     \frac{y_{i+1}^n-2y_i^n+y_{i-1}^n}{\Delta x^2}.
 \end{align}
-Este metodo, aplicado diretamente ao sistema de primeira ordem da onda, e instavel para o oscilador sem amortecimento. Por isso os resultados de erro crescem rapidamente.
+Esse método, aplicado diretamente ao sistema de primeira ordem da onda, é instável para o oscilador sem amortecimento. Por isso os resultados de erro crescem rapidamente.
 
-\subsection{Runge-Kutta explicito de quarta ordem}
+\subsection{Runge-Kutta explícito de quarta ordem}
 
-Se $\mathbf{u}=[\mathbf{y},\mathbf{v}]^T$ e $\mathbf{u}'=F(\mathbf{u})$, entao
+Se $\mathbf{u}=[\mathbf{y},\mathbf{v}]^T$ e $\mathbf{u}'=F(\mathbf{u})$, então
 \begin{align}
     \mathbf{k}_1 &= F(\mathbf{u}^n),\\
     \mathbf{k}_2 &= F(\mathbf{u}^n+\tfrac{\Delta t}{2}\mathbf{k}_1),\\
@@ -269,14 +277,14 @@ Se $\mathbf{u}=[\mathbf{y},\mathbf{v}]^T$ e $\mathbf{u}'=F(\mathbf{u})$, entao
     (\mathbf{k}_1+2\mathbf{k}_2+2\mathbf{k}_3+\mathbf{k}_4).
 \end{align}
 
-\subsection{Euler implicito}
+\subsection{Euler implícito}
 
 Com $\mathbf{D}_{xx}$ representando a matriz de segunda derivada nos pontos internos,
 \begin{align}
     \mathbf{y}^{n+1}-\Delta t\,\mathbf{v}^{n+1}&=\mathbf{y}^n,\\
     -\Delta t\,c^2\mathbf{D}_{xx}\mathbf{y}^{n+1}+\mathbf{v}^{n+1}&=\mathbf{v}^n.
 \end{align}
-Logo, o sistema linear resolvido a cada passo e
+Logo, o sistema linear resolvido a cada passo é
 \begin{equation}
     \begin{bmatrix}
         \mathbf{I} & -\Delta t\,\mathbf{I}\\
@@ -292,7 +300,7 @@ Logo, o sistema linear resolvido a cada passo e
         \mathbf{v}^{n}
     \end{bmatrix}.
 \end{equation}
-A matriz $\mathbf{D}_{xx}$ e tridiagonal:
+A matriz $\mathbf{D}_{xx}$ é tridiagonal:
 \begin{equation}
     \mathbf{D}_{xx}
     =
@@ -306,14 +314,25 @@ A matriz $\mathbf{D}_{xx}$ e tridiagonal:
     \end{bmatrix}.
 \end{equation}
 
+\subsection{Solução analítica e erro}
+
+A solução analítica usada para a comparação é
+\begin{equation}
+    y(x,t)=A\sin\left(\frac{\pi x}{L}\right)\cos\left(\frac{\pi c t}{L}\right).
+\end{equation}
+O erro discreto foi calculado por
+\begin{equation}
+    E(t)=\sqrt{\frac{1}{N}\sum_{i=1}^{N}\left(y_i^{\mathrm{num}}-y_i^{\mathrm{exata}}\right)^2}.
+\end{equation}
+
 \subsection{Resultados da onda}
 
-As simulacoes usaram $N_x=101$ e $\Delta t=0{,}004$ s.
+As simulações usaram $N_x=101$ e $\Delta t=0{,}004$ s.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.86\textwidth]{onda_deslocamento_euler_explicito.png}
-\caption{Deslocamento $y(x,t)$ por Euler explicito.}
+\caption{Deslocamento $y(x,t)$ por Euler explícito.}
 \end{figure}
 
 \begin{figure}[H]
@@ -325,36 +344,42 @@ As simulacoes usaram $N_x=101$ e $\Delta t=0{,}004$ s.
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.86\textwidth]{onda_deslocamento_euler_implicito.png}
-\caption{Deslocamento $y(x,t)$ por Euler implicito.}
+\caption{Deslocamento $y(x,t)$ por Euler implícito.}
 \end{figure}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.86\textwidth]{onda_comparacao_t2.png}
-\caption{Comparacao dos metodos em $t=2$ s.}
+\caption{Comparação dos métodos em $t=2$ s.}
 \end{figure}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.86\textwidth]{onda_evolucao_y_centro.png}
-\caption{Evolucao temporal de $y(L/2,t)$.}
+\caption{Evolução temporal de $y(L/2,t)$.}
 \end{figure}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.86\textwidth]{onda_evolucao_v_centro.png}
-\caption{Evolucao temporal de $v(L/2,t)$.}
+\caption{Evolução temporal de $v(L/2,t)$.}
 \end{figure}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.86\textwidth]{onda_erro_l2.png}
-\caption{Evolucao temporal do erro $L_2$.}
+\caption{Evolução temporal do erro $L_2$.}
 \end{figure}
 
-\section{Programa computacional}
+\section{Programas computacionais}
 
-O codigo completo esta no arquivo \texttt{main.py}. Ele executa todas as simulacoes e grava automaticamente as figuras usadas neste relatorio. O trecho abaixo mostra a chamada principal.
+O código completo está no arquivo \texttt{main.py}. Ele executa todas as simulações e grava automaticamente as figuras usadas neste relatório. Para atender ao pedido de três programas computacionais da questão 9, também foram criados arquivos de execução separados para cada método da onda:
+\[
+\texttt{onda\_euler\_explicito.py},\qquad
+\texttt{onda\_rk4.py},\qquad
+\texttt{onda\_euler\_implicito.py}.
+\]
+Cada um desses arquivos chama a mesma implementação numérica validada em \texttt{main.py}, evitando divergência entre o relatório e os programas.
 
 \begin{lstlisting}[language=Python]
 def run_all() -> None:
@@ -383,14 +408,14 @@ def run_all() -> None:
     save_summary(heat_c_results, wave_results)
 \end{lstlisting}
 
-\section{Conclusoes}
+\section{Conclusões}
 
-O metodo implicito para conducao termica produziu campos suaves e convergentes para todos os coeficientes $C$ testados. O aumento de $C$ elevou o numero medio de iteracoes de Gauss-Seidel por passo, como esperado, pois o acoplamento espacial do sistema linear se torna mais forte.
+O método implícito para condução térmica produziu campos suaves e convergentes para todos os coeficientes $C$ testados. O aumento de $C$ elevou o número médio de iterações de Gauss-Seidel por passo, como esperado, pois o acoplamento espacial do sistema linear se torna mais forte.
 
-Na equacao da onda, o metodo RK4 acompanhou muito bem a solucao analitica no intervalo simulado. O Euler implicito permaneceu estavel, mas introduziu amortecimento numerico. O Euler explicito aplicado diretamente ao sistema de primeira ordem apresentou crescimento instavel, refletido no erro $L_2$.
+Na equação da onda, o método RK4 acompanhou muito bem a solução analítica no intervalo simulado. O Euler implícito permaneceu estável, mas introduziu amortecimento numérico. O Euler explícito aplicado diretamente ao sistema de primeira ordem apresentou crescimento instável, refletido no erro $L_2$.
 
-\section{Referencia}
+\section{Referência}
 
-INCROPERA, F. P.; DEWITT, D. P.; BERGMAN, T. L.; LAVINE, A. S. \textit{Fundamentos de transferencia de calor e de massa}. LTC.
+INCROPERA, F. P.; DEWITT, D. P.; BERGMAN, T. L.; LAVINE, A. S. \textit{Fundamentos de transferência de calor e de massa}. LTC.
 
 \end{document}
